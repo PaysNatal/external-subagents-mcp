@@ -8,4 +8,5 @@ work/
 .DS_Store
 .env
 .env.*
+.external-subagents-mcp.json
 npm-debug.log*

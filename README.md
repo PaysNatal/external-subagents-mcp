@@ -50,7 +50,7 @@ Create `.external-subagents-mcp.json` in your project root, or set `EXTERNAL_SUB
       "wire_api": "chat_completions"
     },
     "mimo": {
-      "base_url": "https://api.mimo-v2.com/v1",
+      "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
       "api_key_env": "MIMO_API_KEY",
       "model": "mimo-v2.5-pro",
       "wire_api": "chat_completions"
@@ -71,6 +71,14 @@ API keys must stay in environment variables:
 export ZAI_API_KEY=...
 export MIMO_API_KEY=...
 ```
+
+For MiMo Token Plan, set `base_url` to the Base URL shown on the subscription page. Current regional examples are:
+
+- China: `https://token-plan-cn.xiaomimimo.com/v1`
+- Singapore: `https://token-plan-sgp.xiaomimimo.com/v1`
+- Europe: `https://token-plan-ams.xiaomimimo.com/v1`
+
+If you are testing MiMo only, point every role at `mimo` and only `MIMO_API_KEY` is required. The `model` value should match the model UID shown for your token plan when MiMo provides a plan-specific UID.
 
 ## Codex MCP config
 

@@ -6,23 +6,26 @@ import { OpenAICompatibleProvider } from "./provider.js";
 import { createWorkspace } from "./workspace.js";
 
 export function createAppFromConfig(config: NormalizedConfig, env: NodeJS.ProcessEnv = process.env): ExternalSubagentsApp {
+  const usedProviderNames = new Set(Object.values(config.roles).map(role => role.provider));
   const providers = new Map(
-    Object.entries(config.providers).map(([name, providerConfig]) => {
-      const apiKey = env[providerConfig.api_key_env];
-      if (!apiKey) {
-        throw new Error(`Missing API key environment variable for provider "${name}": ${providerConfig.api_key_env}`);
-      }
-      return [
-        name,
-        new OpenAICompatibleProvider({
+    Object.entries(config.providers)
+      .filter(([name]) => usedProviderNames.has(name))
+      .map(([name, providerConfig]) => {
+        const apiKey = env[providerConfig.api_key_env];
+        if (!apiKey) {
+          throw new Error(`Missing API key environment variable for provider "${name}": ${providerConfig.api_key_env}`);
+        }
+        return [
           name,
-          baseUrl: providerConfig.base_url,
-          apiKey,
-          model: providerConfig.model,
-          timeoutMs: providerConfig.timeout_ms
-        })
-      ] as const;
-    })
+          new OpenAICompatibleProvider({
+            name,
+            baseUrl: providerConfig.base_url,
+            apiKey,
+            model: providerConfig.model,
+            timeoutMs: providerConfig.timeout_ms
+          })
+        ] as const;
+      })
   );
 
   return new ExternalSubagentsApp({
