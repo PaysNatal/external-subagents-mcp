@@ -6,27 +6,26 @@ import { OpenAICompatibleProvider } from "./provider.js";
 import { createWorkspace } from "./workspace.js";
 
 export function createAppFromConfig(config: NormalizedConfig, env: NodeJS.ProcessEnv = process.env): ExternalSubagentsApp {
-  const usedProviderNames = new Set(Object.values(config.roles).map(role => role.provider));
-  const providers = new Map(
-    Object.entries(config.providers)
-      .filter(([name]) => usedProviderNames.has(name))
-      .map(([name, providerConfig]) => {
-        const apiKey = env[providerConfig.api_key_env];
-        if (!apiKey) {
-          throw new Error(`Missing API key environment variable for provider "${name}": ${providerConfig.api_key_env}`);
-        }
-        return [
-          name,
-          new OpenAICompatibleProvider({
-            name,
-            baseUrl: providerConfig.base_url,
-            apiKey,
-            model: providerConfig.model,
-            timeoutMs: providerConfig.timeout_ms
-          })
-        ] as const;
+  const providers = new Map<string, OpenAICompatibleProvider>();
+  const missingProviderKeys = new Map<string, string>();
+
+  for (const [name, providerConfig] of Object.entries(config.providers)) {
+    const apiKey = env[providerConfig.api_key_env];
+    if (!apiKey) {
+      missingProviderKeys.set(name, providerConfig.api_key_env);
+      continue;
+    }
+    providers.set(
+      name,
+      new OpenAICompatibleProvider({
+        name,
+        baseUrl: providerConfig.base_url,
+        apiKey,
+        model: providerConfig.model,
+        timeoutMs: providerConfig.timeout_ms
       })
-  );
+    );
+  }
 
   return new ExternalSubagentsApp({
     config,
@@ -38,7 +37,9 @@ export function createAppFromConfig(config: NormalizedConfig, env: NodeJS.Proces
     }),
     jobs: new JobManager({
       providers,
+      missingProviderKeys,
       roles: new Map(Object.entries(config.roles)),
+      routing: config.routing,
       globalConcurrency: config.concurrency.global,
       perProviderConcurrency: config.concurrency.perProvider
     })

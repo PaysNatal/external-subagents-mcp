@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { CachedJobResult, JobKind, JobRecord, JobState, ProviderClient, RoleConfig } from "./types.js";
+import { Buffer } from "node:buffer";
+import type { CachedJobResult, JobKind, JobRecord, JobState, ProviderClient, RoleConfig, RoutingConfig } from "./types.js";
 
 export interface StartJobInput {
   kind: JobKind;
@@ -8,6 +9,7 @@ export interface StartJobInput {
   cacheKey?: string;
   cached?: CachedJobResult;
   inputHash?: string;
+  inputBytes?: number;
   maxOutputTokens?: number;
   onComplete?: (job: JobRecord) => Promise<void>;
 }
@@ -22,7 +24,9 @@ interface QueuedJob extends JobRecord {
 
 export interface JobManagerOptions {
   providers: Map<string, ProviderClient>;
+  missingProviderKeys?: Map<string, string>;
   roles: Map<string, RoleConfig>;
+  routing?: RoutingConfig;
   globalConcurrency: number;
   perProviderConcurrency: number;
 }
@@ -40,10 +44,8 @@ export class JobManager {
     if (!role) {
       throw new Error(`Unknown role: ${input.role}`);
     }
-    const provider = this.options.providers.get(role.provider);
-    if (!provider) {
-      throw new Error(`Unknown provider for role ${input.role}: ${role.provider}`);
-    }
+    const inputBytes = input.inputBytes ?? Buffer.byteLength(input.prompt, "utf8");
+    const route = this.selectRoute(input.kind, input.role, role, inputBytes);
 
     const now = new Date().toISOString();
     if (input.cached) {
@@ -51,7 +53,7 @@ export class JobManager {
         id: `job_${randomUUID()}`,
         kind: input.kind,
         role: input.role,
-        provider: role.provider,
+        provider: input.cached.provider || route.provider,
         state: "completed",
         createdAt: now,
         startedAt: now,
@@ -67,18 +69,20 @@ export class JobManager {
       return publicJob(cachedJob);
     }
 
+    this.resolveProvider(input.role, route.provider);
+
     const job: QueuedJob = {
       id: `job_${randomUUID()}`,
       kind: input.kind,
       role: input.role,
-      provider: role.provider,
+      provider: route.provider,
       state: "queued",
       createdAt: now,
       cacheKey: input.cacheKey,
       cacheHit: false,
       prompt: input.prompt,
       inputHash: input.inputHash,
-      maxOutputTokens: input.maxOutputTokens,
+      maxOutputTokens: input.maxOutputTokens ?? route.maxOutputTokens,
       onComplete: input.onComplete,
       abortController: new AbortController()
     };
@@ -192,6 +196,58 @@ export class JobManager {
       this.pump();
     }
   }
+
+  private selectRoute(kind: JobKind, roleName: string, role: RoleConfig, inputBytes: number): { provider: string; maxOutputTokens: number } {
+    const fallback = { provider: role.provider, maxOutputTokens: role.maxOutputTokens };
+    if (this.options.routing?.mode !== "auto") {
+      return fallback;
+    }
+
+    for (const rule of this.options.routing.autoRules) {
+      if (!routeRuleMatches(rule, kind, roleName, inputBytes)) {
+        continue;
+      }
+      return {
+        provider: rule.provider,
+        maxOutputTokens: rule.maxOutputTokens ?? role.maxOutputTokens
+      };
+    }
+
+    return fallback;
+  }
+
+  private resolveProvider(roleName: string, providerName: string): ProviderClient {
+    const provider = this.options.providers.get(providerName);
+    if (provider) {
+      return provider;
+    }
+    const missingEnv = this.options.missingProviderKeys?.get(providerName);
+    if (missingEnv) {
+      throw new Error(`Missing API key environment variable for provider "${providerName}": ${missingEnv}`);
+    }
+    throw new Error(`Unknown provider for role ${roleName}: ${providerName}`);
+  }
+}
+
+function routeRuleMatches(
+  rule: NonNullable<RoutingConfig["autoRules"]>[number],
+  kind: JobKind,
+  roleName: string,
+  inputBytes: number
+): boolean {
+  if (rule.role && rule.role !== roleName) {
+    return false;
+  }
+  if (rule.kinds && !rule.kinds.includes(kind)) {
+    return false;
+  }
+  if (rule.minInputBytes !== undefined && inputBytes < rule.minInputBytes) {
+    return false;
+  }
+  if (rule.maxInputBytes !== undefined && inputBytes > rule.maxInputBytes) {
+    return false;
+  }
+  return true;
 }
 
 function publicJob(job: QueuedJob | JobRecord): JobRecord {

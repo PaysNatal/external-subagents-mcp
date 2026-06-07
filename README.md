@@ -54,13 +54,41 @@ Create `.external-subagents-mcp.json` in your project root, or set `EXTERNAL_SUB
       "api_key_env": "MIMO_API_KEY",
       "model": "mimo-v2.5-pro",
       "wire_api": "chat_completions"
+    },
+    "fast": {
+      "base_url": "https://api.example.com/v1",
+      "api_key_env": "FAST_API_KEY",
+      "model": "fast-code-model",
+      "wire_api": "chat_completions"
     }
   },
-  "roles": {
-    "summarizer": { "provider": "mimo", "max_output_tokens": 2000 },
-    "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
-    "log_analyst": { "provider": "mimo", "max_output_tokens": 2500 },
-    "file_finder": { "provider": "mimo", "max_output_tokens": 1500 }
+  "routing": {
+    "profile": "code_quality_first",
+    "mode": "auto",
+    "auto_rules": [
+      { "kind": "find_relevant_files", "provider": "fast", "max_output_tokens": 1200 },
+      { "role": "log_analyst", "min_input_bytes": 100000, "provider": "glm", "max_output_tokens": 3000 }
+    ]
+  },
+  "profiles": {
+    "cost_first": {
+      "summarizer": "mimo",
+      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
+      "log_analyst": "mimo",
+      "file_finder": "mimo"
+    },
+    "code_quality_first": {
+      "summarizer": { "provider": "mimo", "max_output_tokens": 2000 },
+      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
+      "log_analyst": { "provider": "glm", "max_output_tokens": 2500 },
+      "file_finder": { "provider": "glm", "max_output_tokens": 1800 }
+    },
+    "balanced_three_model": {
+      "summarizer": "mimo",
+      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
+      "log_analyst": { "provider": "glm", "max_output_tokens": 2500 },
+      "file_finder": { "provider": "fast", "max_output_tokens": 1200 }
+    }
   }
 }
 ```
@@ -79,6 +107,39 @@ For MiMo Token Plan, set `base_url` to the Base URL shown on the subscription pa
 - Europe: `https://token-plan-ams.xiaomimimo.com/v1`
 
 If you are testing MiMo only, point every role at `mimo` and only `MIMO_API_KEY` is required. The `model` value should match the model UID shown for your token plan when MiMo provides a plan-specific UID.
+
+### Profiles and routing
+
+Use `profiles` when you have two or more providers and want a one-line strategy switch:
+
+- `cost_first`: MiMo handles bulk summary/log/file discovery; GLM handles code review.
+- `code_quality_first`: GLM handles code review, log analysis, and file discovery; MiMo handles bulk summarization.
+- `balanced_three_model`: a third fast/cheap model handles file discovery; GLM handles code judgment; MiMo handles summarization.
+
+Set the active strategy with:
+
+```json
+{
+  "routing": { "profile": "code_quality_first" }
+}
+```
+
+`routing.mode = "auto"` adds first-match provider selection rules on top of the active profile. Auto routing only chooses the provider and optional output budget. It does not summarize, compress, rewrite, or otherwise transform the prompt before sending it to the selected provider.
+
+```json
+{
+  "routing": {
+    "profile": "code_quality_first",
+    "mode": "auto",
+    "auto_rules": [
+      { "kind": "find_relevant_files", "provider": "fast" },
+      { "role": "log_analyst", "min_input_bytes": 100000, "provider": "glm", "max_output_tokens": 3000 }
+    ]
+  }
+}
+```
+
+API keys are lazy by provider use. Missing keys do not prevent server startup; a job fails clearly only if it routes to a provider whose `api_key_env` is not set. Cached results can still be read without the provider key.
 
 ## Codex MCP config
 

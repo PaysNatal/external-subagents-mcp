@@ -46,6 +46,23 @@ export interface RoleConfig {
 
 export type JobKind = "review_diff" | "summarize_paths" | "find_relevant_files" | "analyze_log";
 
+export type RoutingMode = "profile" | "auto";
+
+export interface RoutingRule {
+  role?: string;
+  kinds?: JobKind[];
+  minInputBytes?: number;
+  maxInputBytes?: number;
+  provider: string;
+  maxOutputTokens?: number;
+}
+
+export interface RoutingConfig {
+  profile?: string;
+  mode: RoutingMode;
+  autoRules: RoutingRule[];
+}
+
 export type JobState = "queued" | "running" | "completed" | "failed" | "cancelled";
 
 export interface JobRecord {

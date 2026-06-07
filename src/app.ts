@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { REPORT_CONTRACT } from "./report.js";
 import type { DiskCache } from "./cache.js";
 import type { NormalizedConfig } from "./config.js";
@@ -196,9 +197,19 @@ export class ExternalSubagentsApp {
     outputBudget?: number;
   }): Promise<JobRecord> {
     const cacheMode = input.cacheMode ?? "read_write";
-    const cacheKey = cacheMode === "skip" ? undefined : this.options.cache.keyFor(input.role, input.inputForCache);
+    const inputBytes = Buffer.byteLength(input.prompt, "utf8");
+    const routedInputForCache = {
+      input: input.inputForCache,
+      route: {
+        role: input.role,
+        roleConfig: this.options.config.roles[input.role],
+        routing: this.options.config.routing,
+        inputBytes
+      }
+    };
+    const cacheKey = cacheMode === "skip" ? undefined : this.options.cache.keyFor(input.role, routedInputForCache);
     const cached = cacheKey && cacheMode !== "skip" ? await this.options.cache.get(cacheKey) : undefined;
-    const inputHash = this.options.cache.inputHash(input.inputForCache);
+    const inputHash = this.options.cache.inputHash(routedInputForCache);
 
     return this.options.jobs.start({
       kind: input.kind,
@@ -207,6 +218,7 @@ export class ExternalSubagentsApp {
       cacheKey,
       cached,
       inputHash,
+      inputBytes,
       maxOutputTokens: input.outputBudget,
       onComplete:
         cacheKey && cacheMode === "read_write"
