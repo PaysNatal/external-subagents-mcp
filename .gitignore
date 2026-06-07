@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.npm-cache/
+.external-subagents/
+outputs/
+work/
+.DS_Store
+.env
+.env.*
+npm-debug.log*

@@ -1,0 +1,37 @@
+{
+  "workspace": {
+    "allow": ["src/**", "tests/**", "docs/**", "package.json", "README.md"],
+    "deny": ["**/.env*", "**/node_modules/**", "**/dist/**", "**/*.pem"],
+    "max_file_bytes": 262144,
+    "max_total_bytes": 2097152
+  },
+  "cache": {
+    "dir": ".external-subagents/cache",
+    "ttl_hours": 168,
+    "max_bytes": 524288000
+  },
+  "concurrency": {
+    "global": 3,
+    "per_provider": 2
+  },
+  "providers": {
+    "glm": {
+      "base_url": "https://api.z.ai/api/paas/v4",
+      "api_key_env": "ZAI_API_KEY",
+      "model": "glm-5.1",
+      "wire_api": "chat_completions"
+    },
+    "mimo": {
+      "base_url": "https://api.mimo-v2.com/v1",
+      "api_key_env": "MIMO_API_KEY",
+      "model": "mimo-v2.5-pro",
+      "wire_api": "chat_completions"
+    }
+  },
+  "roles": {
+    "summarizer": { "provider": "mimo", "max_output_tokens": 2000 },
+    "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
+    "log_analyst": { "provider": "mimo", "max_output_tokens": 2500 },
+    "file_finder": { "provider": "mimo", "max_output_tokens": 1500 }
+  }
+}

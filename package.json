@@ -1,0 +1,44 @@
+{
+  "name": "external-subagents-mcp",
+  "version": "0.1.0",
+  "description": "A read-only MCP server that delegates large-context review and summarization work to OpenAI-compatible external models.",
+  "type": "module",
+  "bin": {
+    "external-subagents-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    ".external-subagents-mcp.example.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "codex",
+    "subagents",
+    "openai-compatible",
+    "glm",
+    "mimo"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "minimatch": "^10.0.3",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.15"
+  }
+}

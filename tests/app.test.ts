@@ -1,0 +1,80 @@
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { describe, expect, it, vi } from "vitest";
+import { ExternalSubagentsApp } from "../src/app.js";
+import { DiskCache } from "../src/cache.js";
+import { normalizeConfig } from "../src/config.js";
+import { JobManager } from "../src/jobs.js";
+import { createWorkspace } from "../src/workspace.js";
+import type { DelegateReport, ProviderClient } from "../src/types.js";
+
+describe("ExternalSubagentsApp", () => {
+  it("delegates path summaries and reuses disk cache on repeated inputs", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "external-subagents-app-"));
+    await mkdir(path.join(root, "src"), { recursive: true });
+    await writeFile(path.join(root, "src/app.ts"), "export function meaning() { return 42; }\n");
+
+    const config = normalizeConfig(
+      {
+        workspace: { allow: ["src/**"] },
+        cache: { dir: ".cache" },
+        providers: {
+          local: {
+            base_url: "https://example.test/v1",
+            api_key_env: "EXAMPLE_API_KEY",
+            model: "example-model"
+          }
+        },
+        roles: { summarizer: { provider: "local" } }
+      },
+      root
+    );
+    const report: DelegateReport = {
+      status: "DONE",
+      summary: "The file exports meaning().",
+      findings: [],
+      next_actions: ["Open src/app.ts before editing."],
+      omitted: []
+    };
+    const provider: ProviderClient = {
+      name: "local",
+      runReport: vi.fn(async request => {
+        expect(request.user).toContain("meaning");
+        return report;
+      })
+    };
+    const manager = new JobManager({
+      providers: new Map([["local", provider]]),
+      roles: new Map(Object.entries(config.roles)),
+      globalConcurrency: 1,
+      perProviderConcurrency: 1
+    });
+    const app = new ExternalSubagentsApp({
+      config,
+      workspace: createWorkspace(config),
+      cache: new DiskCache({
+        dir: config.cache.dir,
+        ttlHours: config.cache.ttlHours,
+        maxBytes: config.cache.maxBytes
+      }),
+      jobs: manager
+    });
+
+    const first = await app.delegateSummarizePaths({
+      paths: ["src/app.ts"],
+      focus: "public API",
+      cache_mode: "read_write"
+    });
+    await manager.wait([first.id], 1000);
+
+    const second = await app.delegateSummarizePaths({
+      paths: ["src/app.ts"],
+      focus: "public API",
+      cache_mode: "read_write"
+    });
+
+    expect(second.cacheHit).toBe(true);
+    expect(provider.runReport).toHaveBeenCalledOnce();
+  });
+});
