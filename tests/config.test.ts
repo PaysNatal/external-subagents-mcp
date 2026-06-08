@@ -52,34 +52,34 @@ describe("normalizeConfig", () => {
       {
         routing: { profile: "quality_first" },
         providers: {
-          bulk: {
+          lite: {
             base_url: "https://example.test/v1",
-            api_key_env: "EXTERNAL_SUBAGENTS_BULK_API_KEY",
-            model: "bulk-model"
+            api_key_env: "EXTERNAL_SUBAGENTS_LITE_API_KEY",
+            model: "lite-model"
           },
-          quality: {
+          pro: {
             base_url: "https://example.test/v1",
-            api_key_env: "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
-            model: "quality-model"
+            api_key_env: "EXTERNAL_SUBAGENTS_PRO_API_KEY",
+            model: "pro-model"
           },
-          primary: {
+          standard: {
             base_url: "https://example.test/v1",
-            api_key_env: "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
-            model: "primary-model"
+            api_key_env: "EXTERNAL_SUBAGENTS_STANDARD_API_KEY",
+            model: "standard-model"
           }
         },
         profiles: {
           cost_first: {
-            summarizer: "bulk",
-            reviewer: "quality",
-            log_analyst: "bulk",
-            file_finder: "bulk"
+            summarizer: "lite",
+            reviewer: "pro",
+            log_analyst: "lite",
+            file_finder: "lite"
           },
           quality_first: {
-            summarizer: "bulk",
-            reviewer: { provider: "quality", max_output_tokens: 3000 },
-            log_analyst: "quality",
-            file_finder: { provider: "primary", max_output_tokens: 1200 }
+            summarizer: "lite",
+            reviewer: { provider: "pro", max_output_tokens: 3000 },
+            log_analyst: "pro",
+            file_finder: { provider: "standard", max_output_tokens: 1200 }
           }
         }
       },
@@ -87,9 +87,9 @@ describe("normalizeConfig", () => {
     );
 
     expect(config.routing.profile).toBe("quality_first");
-    expect(config.roles.summarizer.provider).toBe("bulk");
-    expect(config.roles.reviewer.provider).toBe("quality");
-    expect(config.roles.file_finder.provider).toBe("primary");
+    expect(config.roles.summarizer.provider).toBe("lite");
+    expect(config.roles.reviewer.provider).toBe("pro");
+    expect(config.roles.file_finder.provider).toBe("standard");
     expect(config.roles.file_finder.max_output_tokens).toBe(1200);
   });
 
@@ -100,25 +100,25 @@ describe("normalizeConfig", () => {
           profile: "quality_first",
           mode: "auto",
           auto_rules: [
-            { kind: "find_relevant_files", provider: "primary" },
+            { kind: "find_relevant_files", provider: "standard" },
             { role: "log_analyst", min_input_bytes: 100000, provider: "long_context", max_output_tokens: 4000 }
           ]
         },
         providers: {
-          bulk: {
+          lite: {
             base_url: "https://example.test/v1",
-            api_key_env: "EXTERNAL_SUBAGENTS_BULK_API_KEY",
-            model: "bulk-model"
+            api_key_env: "EXTERNAL_SUBAGENTS_LITE_API_KEY",
+            model: "lite-model"
           },
-          quality: {
+          pro: {
             base_url: "https://example.test/v1",
-            api_key_env: "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
-            model: "quality-model"
+            api_key_env: "EXTERNAL_SUBAGENTS_PRO_API_KEY",
+            model: "pro-model"
           },
-          primary: {
+          standard: {
             base_url: "https://example.test/v1",
-            api_key_env: "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
-            model: "primary-model"
+            api_key_env: "EXTERNAL_SUBAGENTS_STANDARD_API_KEY",
+            model: "standard-model"
           },
           long_context: {
             base_url: "https://example.test/v1",
@@ -128,10 +128,10 @@ describe("normalizeConfig", () => {
         },
         profiles: {
           quality_first: {
-            summarizer: "bulk",
-            reviewer: "quality",
-            log_analyst: "quality",
-            file_finder: "quality"
+            summarizer: "lite",
+            reviewer: "pro",
+            log_analyst: "pro",
+            file_finder: "pro"
           }
         }
       },
@@ -140,7 +140,7 @@ describe("normalizeConfig", () => {
 
     expect(config.routing.mode).toBe("auto");
     expect(config.routing.autoRules).toEqual([
-      { kinds: ["find_relevant_files"], provider: "primary" },
+      { kinds: ["find_relevant_files"], provider: "standard" },
       { role: "log_analyst", minInputBytes: 100000, provider: "long_context", maxOutputTokens: 4000 }
     ]);
   });

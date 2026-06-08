@@ -15,21 +15,21 @@
     "per_provider": 2
   },
   "providers": {
-    "primary": {
+    "standard": {
       "base_url": "https://api.example.com/v1",
-      "api_key_env": "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
+      "api_key_env": "EXTERNAL_SUBAGENTS_STANDARD_API_KEY",
       "model": "provider-model-name",
       "wire_api": "chat_completions"
     },
-    "bulk": {
+    "lite": {
       "base_url": "https://api.example.com/v1",
-      "api_key_env": "EXTERNAL_SUBAGENTS_BULK_API_KEY",
+      "api_key_env": "EXTERNAL_SUBAGENTS_LITE_API_KEY",
       "model": "provider-model-name",
       "wire_api": "chat_completions"
     },
-    "quality": {
+    "pro": {
       "base_url": "https://api.example.com/v1",
-      "api_key_env": "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
+      "api_key_env": "EXTERNAL_SUBAGENTS_PRO_API_KEY",
       "model": "provider-model-name",
       "wire_api": "chat_completions"
     }
@@ -45,22 +45,22 @@
   },
   "profiles": {
     "single_provider": {
-      "summarizer": "primary",
-      "reviewer": "primary",
-      "log_analyst": "primary",
-      "file_finder": "primary"
+      "summarizer": "standard",
+      "reviewer": "standard",
+      "log_analyst": "standard",
+      "file_finder": "standard"
     },
     "cost_first": {
-      "summarizer": "bulk",
-      "reviewer": "quality",
-      "log_analyst": "bulk",
-      "file_finder": "bulk"
+      "summarizer": "lite",
+      "reviewer": "pro",
+      "log_analyst": "lite",
+      "file_finder": "lite"
     },
     "quality_first": {
-      "summarizer": "bulk",
-      "reviewer": "quality",
-      "log_analyst": "quality",
-      "file_finder": "quality"
+      "summarizer": "lite",
+      "reviewer": "pro",
+      "log_analyst": "pro",
+      "file_finder": "pro"
     }
   }
 }

@@ -9,25 +9,25 @@ describe("provider diagnostics", () => {
         routing: {
           profile: "quality_first",
           mode: "auto",
-          auto_rules: [{ kind: "find_relevant_files", provider: "primary" }],
+          auto_rules: [{ kind: "find_relevant_files", provider: "standard" }],
           budget_rules: [{ name: "long_logs", role: "log_analyst", min_input_bytes: 20000, max_output_tokens: 3500 }]
         },
         providers: {
-          bulk: {
+          lite: {
             base_url: "https://example.test/v1",
-            api_key_env: "EXTERNAL_SUBAGENTS_BULK_API_KEY",
-            model: "bulk-model"
+            api_key_env: "EXTERNAL_SUBAGENTS_LITE_API_KEY",
+            model: "lite-model"
           },
-          quality: {
+          pro: {
             base_url: "https://example.test/v1",
-            api_key_env: "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
-            model: "quality-model"
+            api_key_env: "EXTERNAL_SUBAGENTS_PRO_API_KEY",
+            model: "pro-model"
           },
-          primary: {
+          standard: {
             base_url: "https://example.test/v1",
             chat_completions_path: "openai/chat/completions",
-            api_key_env: "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
-            model: "primary-model"
+            api_key_env: "EXTERNAL_SUBAGENTS_STANDARD_API_KEY",
+            model: "standard-model"
           },
           unused: {
             base_url: "https://example.test/v1",
@@ -37,10 +37,10 @@ describe("provider diagnostics", () => {
         },
         profiles: {
           quality_first: {
-            summarizer: "bulk",
-            reviewer: "quality",
-            log_analyst: "quality",
-            file_finder: "quality"
+            summarizer: "lite",
+            reviewer: "pro",
+            log_analyst: "pro",
+            file_finder: "pro"
           }
         }
       },
@@ -48,8 +48,8 @@ describe("provider diagnostics", () => {
     );
 
     const report = buildProviderStatusReport(config, {
-      EXTERNAL_SUBAGENTS_BULK_API_KEY: "bulk-secret",
-      EXTERNAL_SUBAGENTS_QUALITY_API_KEY: "quality-secret"
+      EXTERNAL_SUBAGENTS_LITE_API_KEY: "lite-secret",
+      EXTERNAL_SUBAGENTS_PRO_API_KEY: "pro-secret"
     });
 
     expect(report.status).toBe("WARN");
@@ -60,16 +60,16 @@ describe("provider diagnostics", () => {
         { name: "long_logs", role: "log_analyst", min_input_bytes: 20000, max_output_tokens: 3500 }
       ]
     });
-    expect(report.providers.find(provider => provider.name === "bulk")).toMatchObject({
+    expect(report.providers.find(provider => provider.name === "lite")).toMatchObject({
       key_status: "set",
       used_by: ["role:summarizer"]
     });
-    expect(report.providers.find(provider => provider.name === "quality")?.used_by).toEqual([
+    expect(report.providers.find(provider => provider.name === "pro")?.used_by).toEqual([
       "role:reviewer",
       "role:log_analyst",
       "role:file_finder"
     ]);
-    expect(report.providers.find(provider => provider.name === "primary")).toMatchObject({
+    expect(report.providers.find(provider => provider.name === "standard")).toMatchObject({
       chat_completions_url: "https://example.test/v1/openai/chat/completions",
       key_status: "missing",
       used_by: ["auto_rule:find_relevant_files"]
@@ -81,7 +81,7 @@ describe("provider diagnostics", () => {
     expect(report.issues).toContainEqual(
       expect.objectContaining({
         severity: "warning",
-        provider: "primary",
+        provider: "standard",
         code: "missing_api_key"
       })
     );

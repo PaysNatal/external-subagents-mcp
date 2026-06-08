@@ -36,9 +36,9 @@ Open `.external-subagents-mcp.json` and edit the provider you want to use:
 ```json
 {
   "providers": {
-    "primary": {
+    "standard": {
       "base_url": "https://your-provider.example/v1",
-      "api_key_env": "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
+      "api_key_env": "EXTERNAL_SUBAGENTS_STANDARD_API_KEY",
       "model": "your-model-name"
     }
   }
@@ -59,7 +59,7 @@ Never put an API key inside `.external-subagents-mcp.json`.
 The name in `api_key_env` connects a provider config to an environment variable:
 
 ```json
-"api_key_env": "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY"
+"api_key_env": "EXTERNAL_SUBAGENTS_STANDARD_API_KEY"
 ```
 
 The matching environment variable must contain the real secret.
@@ -67,7 +67,7 @@ The matching environment variable must contain the real secret.
 For a temporary macOS/Linux shell session:
 
 ```bash
-export EXTERNAL_SUBAGENTS_PRIMARY_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_STANDARD_API_KEY="your-api-key"
 ```
 
 For a persistent macOS/Linux setup, keep secrets outside the project:
@@ -81,9 +81,9 @@ ${EDITOR:-nano} ~/.config/external-subagents-mcp/env
 Add the required variables to that file:
 
 ```bash
-export EXTERNAL_SUBAGENTS_PRIMARY_API_KEY="your-api-key"
-export EXTERNAL_SUBAGENTS_BULK_API_KEY="your-api-key"
-export EXTERNAL_SUBAGENTS_QUALITY_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_STANDARD_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_LITE_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_PRO_API_KEY="your-api-key"
 ```
 
 Only add variables for providers you use. Then protect and load the file:
@@ -99,7 +99,7 @@ Use `~/.bashrc` instead of `~/.zshrc` when Bash is your shell.
 For Windows PowerShell, set a user environment variable:
 
 ```powershell
-[Environment]::SetEnvironmentVariable("EXTERNAL_SUBAGENTS_PRIMARY_API_KEY", "your-api-key", "User")
+[Environment]::SetEnvironmentVariable("EXTERNAL_SUBAGENTS_STANDARD_API_KEY", "your-api-key", "User")
 ```
 
 Restart the terminal and Codex after changing persistent environment variables.
@@ -113,9 +113,9 @@ Add this to `~/.codex/config.toml` on macOS/Linux or `%USERPROFILE%\.codex\confi
 command = "npx"
 args = ["-y", "external-subagents-mcp"]
 env_vars = [
-  "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
-  "EXTERNAL_SUBAGENTS_BULK_API_KEY",
-  "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
+  "EXTERNAL_SUBAGENTS_STANDARD_API_KEY",
+  "EXTERNAL_SUBAGENTS_LITE_API_KEY",
+  "EXTERNAL_SUBAGENTS_PRO_API_KEY",
   "EXTERNAL_SUBAGENTS_CONFIG"
 ]
 startup_timeout_sec = 20
@@ -128,19 +128,19 @@ tool_timeout_sec = 300
 
 ```bash
 external-subagents-mcp doctor
-external-subagents-mcp smoke --provider primary
+external-subagents-mcp smoke --provider standard
 ```
 
 `doctor` shows active routing, missing environment variables, models, and computed chat-completions URLs without printing secrets.
 
 ## Profiles: one-line strategy switching
 
-Profiles are the main way to control which model handles each role. Use semantic provider names such as `bulk`, `quality`, and `primary`; the providers can point to any compatible API.
+Profiles are the main way to control which model handles each role. Use semantic provider names such as `lite`, `standard`, and `pro`; the providers can point to any compatible API.
 
 The generated config includes:
 
 - `single_provider`: one provider handles every role. Best for initial setup.
-- `cost_first`: a low-cost provider handles bulk work; a stronger provider handles review.
+- `cost_first`: a low-cost provider handles routine work; a stronger provider handles review.
 - `quality_first`: a low-cost provider summarizes; a stronger provider handles review, logs, and file discovery.
 
 Switch the active strategy by changing one line:
@@ -159,10 +159,10 @@ Each profile maps four roles:
 {
   "profiles": {
     "cost_first": {
-      "summarizer": "bulk",
-      "reviewer": "quality",
-      "log_analyst": "bulk",
-      "file_finder": "bulk"
+      "summarizer": "lite",
+      "reviewer": "pro",
+      "log_analyst": "lite",
+      "file_finder": "lite"
     }
   }
 }
@@ -261,9 +261,9 @@ external-subagents-mcp init
 ```json
 {
   "providers": {
-    "primary": {
+    "standard": {
       "base_url": "https://your-provider.example/v1",
-      "api_key_env": "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
+      "api_key_env": "EXTERNAL_SUBAGENTS_STANDARD_API_KEY",
       "model": "your-model-name"
     }
   }
@@ -284,7 +284,7 @@ external-subagents-mcp init
 配置中的 `api_key_env` 用于指定环境变量名称：
 
 ```json
-"api_key_env": "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY"
+"api_key_env": "EXTERNAL_SUBAGENTS_STANDARD_API_KEY"
 ```
 
 同名环境变量中才存放真正的 API key。
@@ -292,7 +292,7 @@ external-subagents-mcp init
 macOS/Linux 当前终端临时使用：
 
 ```bash
-export EXTERNAL_SUBAGENTS_PRIMARY_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_STANDARD_API_KEY="your-api-key"
 ```
 
 macOS/Linux 持久设置时，建议将密钥文件放在项目之外：
@@ -306,9 +306,9 @@ ${EDITOR:-nano} ~/.config/external-subagents-mcp/env
 在打开的文件中填写需要使用的变量：
 
 ```bash
-export EXTERNAL_SUBAGENTS_PRIMARY_API_KEY="your-api-key"
-export EXTERNAL_SUBAGENTS_BULK_API_KEY="your-api-key"
-export EXTERNAL_SUBAGENTS_QUALITY_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_STANDARD_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_LITE_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_PRO_API_KEY="your-api-key"
 ```
 
 只需填写实际使用的 provider。随后保护并加载这个文件：
@@ -324,7 +324,7 @@ source ~/.zshrc
 Windows PowerShell 可设置用户级环境变量：
 
 ```powershell
-[Environment]::SetEnvironmentVariable("EXTERNAL_SUBAGENTS_PRIMARY_API_KEY", "your-api-key", "User")
+[Environment]::SetEnvironmentVariable("EXTERNAL_SUBAGENTS_STANDARD_API_KEY", "your-api-key", "User")
 ```
 
 修改持久环境变量后，请重启终端和 Codex。
@@ -338,9 +338,9 @@ Windows PowerShell 可设置用户级环境变量：
 command = "npx"
 args = ["-y", "external-subagents-mcp"]
 env_vars = [
-  "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
-  "EXTERNAL_SUBAGENTS_BULK_API_KEY",
-  "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
+  "EXTERNAL_SUBAGENTS_STANDARD_API_KEY",
+  "EXTERNAL_SUBAGENTS_LITE_API_KEY",
+  "EXTERNAL_SUBAGENTS_PRO_API_KEY",
   "EXTERNAL_SUBAGENTS_CONFIG"
 ]
 startup_timeout_sec = 20
@@ -353,14 +353,14 @@ tool_timeout_sec = 300
 
 ```bash
 external-subagents-mcp doctor
-external-subagents-mcp smoke --provider primary
+external-subagents-mcp smoke --provider standard
 ```
 
 `doctor` 会显示当前路由、缺失的环境变量、模型和最终 chat-completions URL，但不会打印密钥。
 
 ## Profiles：一行切换模型策略
 
-Profiles 是控制不同角色使用哪个模型的主要方式。建议使用 `bulk`、`quality`、`primary` 这类语义化 provider 名称；它们可以指向任意兼容 API。
+Profiles 是控制不同角色使用哪个模型的主要方式。建议使用 `lite`、`standard`、`pro` 这类语义化 provider 名称；它们可以指向任意兼容 API。
 
 自动生成的配置包含：
 
@@ -384,10 +384,10 @@ Profiles 是控制不同角色使用哪个模型的主要方式。建议使用 `
 {
   "profiles": {
     "cost_first": {
-      "summarizer": "bulk",
-      "reviewer": "quality",
-      "log_analyst": "bulk",
-      "file_finder": "bulk"
+      "summarizer": "lite",
+      "reviewer": "pro",
+      "log_analyst": "lite",
+      "file_finder": "lite"
     }
   }
 }
