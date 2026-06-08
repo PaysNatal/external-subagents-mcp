@@ -50,46 +50,46 @@ describe("normalizeConfig", () => {
   it("activates the selected profile and supports provider shorthand role entries", () => {
     const config = normalizeConfig(
       {
-        routing: { profile: "balanced_three_model" },
+        routing: { profile: "quality_first" },
         providers: {
-          mimo: {
+          bulk: {
             base_url: "https://example.test/v1",
-            api_key_env: "MIMO_API_KEY",
-            model: "mimo-v2.5-pro"
+            api_key_env: "EXTERNAL_SUBAGENTS_BULK_API_KEY",
+            model: "bulk-model"
           },
-          glm: {
+          quality: {
             base_url: "https://example.test/v1",
-            api_key_env: "ZAI_API_KEY",
-            model: "glm-5.1"
+            api_key_env: "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
+            model: "quality-model"
           },
-          fast: {
+          primary: {
             base_url: "https://example.test/v1",
-            api_key_env: "FAST_API_KEY",
-            model: "fast-code"
+            api_key_env: "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
+            model: "primary-model"
           }
         },
         profiles: {
           cost_first: {
-            summarizer: "mimo",
-            reviewer: "glm",
-            log_analyst: "mimo",
-            file_finder: "mimo"
+            summarizer: "bulk",
+            reviewer: "quality",
+            log_analyst: "bulk",
+            file_finder: "bulk"
           },
-          balanced_three_model: {
-            summarizer: "mimo",
-            reviewer: { provider: "glm", max_output_tokens: 3000 },
-            log_analyst: "glm",
-            file_finder: { provider: "fast", max_output_tokens: 1200 }
+          quality_first: {
+            summarizer: "bulk",
+            reviewer: { provider: "quality", max_output_tokens: 3000 },
+            log_analyst: "quality",
+            file_finder: { provider: "primary", max_output_tokens: 1200 }
           }
         }
       },
       "/repo"
     );
 
-    expect(config.routing.profile).toBe("balanced_three_model");
-    expect(config.roles.summarizer.provider).toBe("mimo");
-    expect(config.roles.reviewer.provider).toBe("glm");
-    expect(config.roles.file_finder.provider).toBe("fast");
+    expect(config.routing.profile).toBe("quality_first");
+    expect(config.roles.summarizer.provider).toBe("bulk");
+    expect(config.roles.reviewer.provider).toBe("quality");
+    expect(config.roles.file_finder.provider).toBe("primary");
     expect(config.roles.file_finder.max_output_tokens).toBe(1200);
   });
 
@@ -97,41 +97,41 @@ describe("normalizeConfig", () => {
     const config = normalizeConfig(
       {
         routing: {
-          profile: "code_quality_first",
+          profile: "quality_first",
           mode: "auto",
           auto_rules: [
-            { kind: "find_relevant_files", provider: "fast" },
+            { kind: "find_relevant_files", provider: "primary" },
             { role: "log_analyst", min_input_bytes: 100000, provider: "long_context", max_output_tokens: 4000 }
           ]
         },
         providers: {
-          mimo: {
+          bulk: {
             base_url: "https://example.test/v1",
-            api_key_env: "MIMO_API_KEY",
-            model: "mimo-v2.5-pro"
+            api_key_env: "EXTERNAL_SUBAGENTS_BULK_API_KEY",
+            model: "bulk-model"
           },
-          glm: {
+          quality: {
             base_url: "https://example.test/v1",
-            api_key_env: "ZAI_API_KEY",
-            model: "glm-5.1"
+            api_key_env: "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
+            model: "quality-model"
           },
-          fast: {
+          primary: {
             base_url: "https://example.test/v1",
-            api_key_env: "FAST_API_KEY",
-            model: "fast-code"
+            api_key_env: "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
+            model: "primary-model"
           },
           long_context: {
             base_url: "https://example.test/v1",
-            api_key_env: "LONG_API_KEY",
-            model: "long-code"
+            api_key_env: "EXTERNAL_SUBAGENTS_LONG_API_KEY",
+            model: "long-model"
           }
         },
         profiles: {
-          code_quality_first: {
-            summarizer: "mimo",
-            reviewer: "glm",
-            log_analyst: "glm",
-            file_finder: "glm"
+          quality_first: {
+            summarizer: "bulk",
+            reviewer: "quality",
+            log_analyst: "quality",
+            file_finder: "quality"
           }
         }
       },
@@ -140,7 +140,7 @@ describe("normalizeConfig", () => {
 
     expect(config.routing.mode).toBe("auto");
     expect(config.routing.autoRules).toEqual([
-      { kinds: ["find_relevant_files"], provider: "fast" },
+      { kinds: ["find_relevant_files"], provider: "primary" },
       { role: "log_analyst", minInputBytes: 100000, provider: "long_context", maxOutputTokens: 4000 }
     ]);
   });

@@ -7,27 +7,27 @@ describe("provider diagnostics", () => {
     const config = normalizeConfig(
       {
         routing: {
-          profile: "code_quality_first",
+          profile: "quality_first",
           mode: "auto",
-          auto_rules: [{ kind: "find_relevant_files", provider: "fast" }],
+          auto_rules: [{ kind: "find_relevant_files", provider: "primary" }],
           budget_rules: [{ name: "long_logs", role: "log_analyst", min_input_bytes: 20000, max_output_tokens: 3500 }]
         },
         providers: {
-          mimo: {
+          bulk: {
             base_url: "https://example.test/v1",
-            api_key_env: "MIMO_API_KEY",
-            model: "mimo-v2.5-pro"
+            api_key_env: "EXTERNAL_SUBAGENTS_BULK_API_KEY",
+            model: "bulk-model"
           },
-          glm: {
+          quality: {
             base_url: "https://example.test/v1",
-            api_key_env: "ZAI_API_KEY",
-            model: "glm-5.1"
+            api_key_env: "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
+            model: "quality-model"
           },
-          fast: {
+          primary: {
             base_url: "https://example.test/v1",
             chat_completions_path: "openai/chat/completions",
-            api_key_env: "FAST_API_KEY",
-            model: "fast-code"
+            api_key_env: "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
+            model: "primary-model"
           },
           unused: {
             base_url: "https://example.test/v1",
@@ -36,11 +36,11 @@ describe("provider diagnostics", () => {
           }
         },
         profiles: {
-          code_quality_first: {
-            summarizer: "mimo",
-            reviewer: "glm",
-            log_analyst: "glm",
-            file_finder: "glm"
+          quality_first: {
+            summarizer: "bulk",
+            reviewer: "quality",
+            log_analyst: "quality",
+            file_finder: "quality"
           }
         }
       },
@@ -48,28 +48,28 @@ describe("provider diagnostics", () => {
     );
 
     const report = buildProviderStatusReport(config, {
-      MIMO_API_KEY: "mimo-secret",
-      ZAI_API_KEY: "glm-secret"
+      EXTERNAL_SUBAGENTS_BULK_API_KEY: "bulk-secret",
+      EXTERNAL_SUBAGENTS_QUALITY_API_KEY: "quality-secret"
     });
 
     expect(report.status).toBe("WARN");
     expect(report.routing).toEqual({
-      profile: "code_quality_first",
+      profile: "quality_first",
       mode: "auto",
       budget_rules: [
         { name: "long_logs", role: "log_analyst", min_input_bytes: 20000, max_output_tokens: 3500 }
       ]
     });
-    expect(report.providers.find(provider => provider.name === "mimo")).toMatchObject({
+    expect(report.providers.find(provider => provider.name === "bulk")).toMatchObject({
       key_status: "set",
       used_by: ["role:summarizer"]
     });
-    expect(report.providers.find(provider => provider.name === "glm")?.used_by).toEqual([
+    expect(report.providers.find(provider => provider.name === "quality")?.used_by).toEqual([
       "role:reviewer",
       "role:log_analyst",
       "role:file_finder"
     ]);
-    expect(report.providers.find(provider => provider.name === "fast")).toMatchObject({
+    expect(report.providers.find(provider => provider.name === "primary")).toMatchObject({
       chat_completions_url: "https://example.test/v1/openai/chat/completions",
       key_status: "missing",
       used_by: ["auto_rule:find_relevant_files"]
@@ -81,7 +81,7 @@ describe("provider diagnostics", () => {
     expect(report.issues).toContainEqual(
       expect.objectContaining({
         severity: "warning",
-        provider: "fast",
+        provider: "primary",
         code: "missing_api_key"
       })
     );
