@@ -21,10 +21,13 @@ npm install -g external-subagents-mcp
 Run this in the root of the project that external models may read:
 
 ```bash
+cd /path/to/your-project
 external-subagents-mcp init
 ```
 
-This creates `.external-subagents-mcp.json` with safe workspace defaults, a single-provider profile, and optional multi-provider profiles. It refuses to overwrite an existing config.
+Replace `/path/to/your-project` with your actual project directory. The directory where you run `init` becomes the default workspace root and receives `.external-subagents-mcp.json`.
+
+The generated config includes safe workspace defaults, a single-provider profile, and optional multi-provider profiles. It refuses to overwrite an existing config.
 
 ### 3. Configure your provider
 
@@ -243,10 +246,13 @@ npm install -g external-subagents-mcp
 进入允许外部模型读取的项目根目录，运行：
 
 ```bash
+cd /你的项目/实际路径
 external-subagents-mcp init
 ```
 
-工具会自动创建 `.external-subagents-mcp.json`，其中包含安全的 workspace 默认值、单模型 profile 和可选的多模型 profiles。已有配置不会被覆盖。
+请将 `/你的项目/实际路径` 替换为真实项目目录。运行 `init` 时所在的目录会成为默认 workspace root，配置文件 `.external-subagents-mcp.json` 也会创建在这里。
+
+自动生成的配置包含安全的 workspace 默认值、单模型 profile 和可选的多模型 profiles。已有配置不会被覆盖。
 
 ### 3. 配置你的 Provider
 
