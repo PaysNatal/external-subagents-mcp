@@ -3,8 +3,8 @@ import type { DelegateReport } from "./types.js";
 
 export const evidenceSchema = z.object({
   path: z.string(),
-  line_start: z.number().int().positive().optional(),
-  line_end: z.number().int().positive().optional()
+  line_start: z.number().int().positive().nullish().transform(value => value ?? undefined),
+  line_end: z.number().int().positive().nullish().transform(value => value ?? undefined)
 });
 
 export const delegateReportSchema = z.object({

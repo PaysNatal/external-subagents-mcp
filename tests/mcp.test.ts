@@ -3,6 +3,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 import { createMcpServer, SERVER_INSTRUCTIONS } from "../src/server.js";
 import type { ExternalSubagentsApp } from "../src/app.js";
+import type { JobRecord } from "../src/types.js";
 
 describe("MCP server", () => {
   it("advertises the delegate tool suite and read-only instructions", async () => {
@@ -29,6 +30,32 @@ describe("MCP server", () => {
       ].sort()
     );
     expect(tools.tools.every(tool => tool.annotations?.readOnlyHint === true)).toBe(true);
+
+    await client.close();
+    await server.close();
+  });
+
+  it("returns array tool results with object structured content", async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const job: JobRecord = {
+      id: "job_test",
+      kind: "analyze_log",
+      role: "log_analyst",
+      provider: "mimo",
+      state: "completed",
+      createdAt: "2026-06-08T00:00:00.000Z",
+      cacheHit: false
+    };
+    const server = createMcpServer({
+      wait: async () => [job]
+    } as unknown as ExternalSubagentsApp);
+    const client = new Client({ name: "test-client", version: "0.0.0" });
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const result = await client.callTool({ name: "delegate_wait", arguments: { job_ids: ["job_test"], timeout_ms: 1000 } });
+
+    expect(result.structuredContent).toEqual({ items: [job] });
+    expect(JSON.parse(String(result.content?.[0]?.text))).toEqual([job]);
 
     await client.close();
     await server.close();

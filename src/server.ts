@@ -192,6 +192,6 @@ function toolResult<T extends object>(structuredContent: T) {
         text: JSON.stringify(structuredContent, null, 2)
       }
     ],
-    structuredContent: structuredContent as Record<string, unknown>
+    structuredContent: (Array.isArray(structuredContent) ? { items: structuredContent } : structuredContent) as Record<string, unknown>
   };
 }
