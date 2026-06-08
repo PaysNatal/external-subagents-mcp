@@ -133,17 +133,33 @@ external-subagents-mcp smoke --provider standard
 
 `doctor` shows active routing, missing environment variables, models, and computed chat-completions URLs without printing secrets.
 
-## Profiles: one-line strategy switching
+## Profiles: how tasks are assigned to models
 
-Profiles are the main way to control which model handles each role. Use semantic provider names such as `lite`, `standard`, and `pro`; the providers can point to any compatible API.
+A profile is a task distribution plan. It decides which provider receives each kind of job. You pick one profile as the active strategy; the MCP server then routes every incoming request accordingly.
 
-The generated config includes:
+The system has two building blocks:
 
-- `single_provider`: one provider handles every role. Best for initial setup.
-- `cost_first`: a low-cost provider handles routine work; a stronger provider handles review.
-- `quality_first`: a low-cost provider summarizes; a stronger provider handles review, logs, and file discovery.
+**Three providers — the models that do the work**
 
-Switch the active strategy by changing one line:
+| Provider | Purpose | When to use |
+|----------|---------|-------------|
+| `lite` | Low-cost, fast response | Routine tasks where speed matters more than depth |
+| `standard` | Default quality, balanced cost | General-purpose work |
+| `pro` | Highest quality, higher cost | Tasks where accuracy is critical |
+
+Each provider is defined once under `providers` and points to any OpenAI-compatible API. You can add more providers beyond these three if you need them.
+
+**Three default profiles — the distribution plans**
+
+Each profile assigns four task roles to the providers above. The roles are: `summarizer`, `reviewer`, `log_analyst`, and `file_finder`.
+
+| Profile | Summarizer | Reviewer | Log analyst | File finder | Best for |
+|---------|-----------|----------|-------------|-------------|----------|
+| `single_provider` | standard | standard | standard | standard | Initial setup — one model does everything |
+| `cost_first` | lite | pro | lite | lite | Save cost — only review gets the strong model |
+| `quality_first` | lite | pro | pro | pro | Maximize quality — only summarization uses the fast model |
+
+Switch the active profile by changing one line:
 
 ```json
 {
@@ -153,20 +169,22 @@ Switch the active strategy by changing one line:
 }
 ```
 
-Each profile maps four roles:
+You can also edit or create profiles. A profile is just a role-to-provider map:
 
 ```json
 {
   "profiles": {
-    "cost_first": {
-      "summarizer": "lite",
+    "my_custom": {
+      "summarizer": "standard",
       "reviewer": "pro",
       "log_analyst": "lite",
-      "file_finder": "lite"
+      "file_finder": "standard"
     }
   }
 }
 ```
+
+Then set `"profile": "my_custom"` in routing.
 
 API keys are lazy by provider use. A missing key does not prevent startup; a job fails clearly only when it routes to that provider.
 
@@ -358,17 +376,33 @@ external-subagents-mcp smoke --provider standard
 
 `doctor` 会显示当前路由、缺失的环境变量、模型和最终 chat-completions URL，但不会打印密钥。
 
-## Profiles：一行切换模型策略
+## Profiles：任务如何分配给模型
 
-Profiles 是控制不同角色使用哪个模型的主要方式。建议使用 `lite`、`standard`、`pro` 这类语义化 provider 名称；它们可以指向任意兼容 API。
+Profile 是任务分配方案。它决定哪种任务由哪个 provider 接收。你选择一个 profile 作为活跃策略，MCP 服务器就会按该方案路由所有请求。
 
-自动生成的配置包含：
+系统由两部分构成：
 
-- `single_provider`：一个 provider 完成所有角色，最适合首次配置。
-- `cost_first`：低成本 provider 承担大批量工作，更强的 provider 负责代码审查。
-- `quality_first`：低成本 provider 负责摘要，更强的 provider 负责审查、日志分析和文件定位。
+**三种 provider — 执行任务的实际模型**
 
-只需修改一行即可切换活跃策略：
+| Provider | 用途 | 适用场景 |
+|----------|------|----------|
+| `lite` | 低成本、响应快 | 速度优先、深度次要的批量任务 |
+| `standard` | 默认质量、成本适中 | 通用任务 |
+| `pro` | 最高质量、成本较高 | 准确性关键的任务 |
+
+每个 provider 在 `providers` 下定义一次，指向任意 OpenAI-compatible API。如果你需要更多层级，可以在这三种之外自行添加。
+
+**三种默认 profile — 任务分配方案**
+
+每个 profile 将四种任务角色分配给上述 provider。角色为：`summarizer`、`reviewer`、`log_analyst`、`file_finder`。
+
+| Profile | Summarizer | Reviewer | Log analyst | File finder | 适用场景 |
+|---------|-----------|----------|-------------|-------------|----------|
+| `single_provider` | standard | standard | standard | standard | 初始配置 — 一个模型处理所有任务 |
+| `cost_first` | lite | pro | lite | lite | 省成本 — 只有代码审查用强模型 |
+| `quality_first` | lite | pro | pro | pro | 重质量 — 只有摘要用快模型 |
+
+修改一行即可切换活跃 profile：
 
 ```json
 {
@@ -378,20 +412,22 @@ Profiles 是控制不同角色使用哪个模型的主要方式。建议使用 `
 }
 ```
 
-每个 profile 分配四种角色：
+你也可以编辑或新建 profile。Profile 本质就是角色到 provider 的映射：
 
 ```json
 {
   "profiles": {
-    "cost_first": {
-      "summarizer": "lite",
+    "my_custom": {
+      "summarizer": "standard",
       "reviewer": "pro",
       "log_analyst": "lite",
-      "file_finder": "lite"
+      "file_finder": "standard"
     }
   }
 }
 ```
+
+然后在 routing 中设置 `"profile": "my_custom"`。
 
 API key 按 provider 实际使用情况延迟生效。缺少未使用 provider 的 key 不会阻止启动；只有任务真正路由到它时才会明确失败。
 
