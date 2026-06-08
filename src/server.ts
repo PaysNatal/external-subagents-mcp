@@ -17,7 +17,9 @@ Tool selection guide:
 - search or locate relevant files → delegate_find_relevant_files
 - debug or analyze errors, logs, crashes → delegate_analyze_log
 
-These tools must not serve as implementers.`;
+These tools must not serve as implementers.
+
+When compacting context, preserve the plain-text summary line above the JSON separator (---). It contains the status, summary, severity ranking, and evidence paths. The nested JSON below the separator may be compressed, but the summary line must be kept intact because it holds the key conclusions and file references Codex needs for verification.`;
 
 const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_write").describe("Cache behavior: read_write (default — cache and reuse), read_only (reuse but don't write new entries), skip (no cache)");
 
@@ -191,13 +193,89 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
 }
 
 function toolResult<T extends object>(structuredContent: T) {
+  const summary = renderCompactSummary(structuredContent);
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify(structuredContent, null, 2)
+        text: summary + "\n\n---\n\n" + JSON.stringify(structuredContent, null, 2)
       }
     ],
     structuredContent: (Array.isArray(structuredContent) ? { items: structuredContent } : structuredContent) as Record<string, unknown>
   };
+}
+
+/**
+ * Render a short plain-text summary from a delegate report, job record,
+ * or other structured output. This layer sits above the full JSON so
+ * Codex compact can preserve the key conclusions even when it drops
+ * the nested structure.
+ */
+function renderCompactSummary(data: object): string {
+  const obj = data as Record<string, unknown>;
+
+  // DelegateReport: has status + summary + findings
+  if (typeof obj.status === "string" && typeof obj.summary === "string") {
+    return renderReportSummary(obj);
+  }
+
+  // JobRecord: has state + kind + role
+  if (typeof obj.state === "string" && typeof obj.kind === "string") {
+    return renderJobSummary(obj);
+  }
+
+  // Array of JobRecords or other items
+  if (Array.isArray(obj)) {
+    const items = obj as Array<Record<string, unknown>>;
+    if (items.length > 0 && typeof items[0].state === "string") {
+      return `${items.length} jobs: ${items.map(j => `[${j.state}] ${j.kind}(${j.role})`).join(", ")}`;
+    }
+    return `${items.length} items`;
+  }
+
+  // Generic: ProviderStatusReport or diagnostics
+  if (typeof obj.status === "string") {
+    return `[${obj.status}] ${String(obj.summary ?? Object.keys(obj).join(", "))}`;
+  }
+
+  return `Result: ${Object.keys(obj).join(", ")}`;
+}
+
+function renderReportSummary(obj: Record<string, unknown>): string {
+  const status = String(obj.status);
+  const summary = String(obj.summary);
+  const findings = Array.isArray(obj.findings) ? obj.findings as Array<Record<string, unknown>> : [];
+
+  const severityOrder: Record<string, number> = { high: 0, medium: 1, low: 2, info: 3 };
+  const sorted = [...findings].sort((a, b) =>
+    (severityOrder[String(a.severity)] ?? 4) - (severityOrder[String(b.severity)] ?? 4)
+  );
+
+  const parts: string[] = [`[${status}] ${summary}`];
+
+  if (sorted.length > 0) {
+    parts.push(`${sorted.length} findings (severity: ${sorted.map(f => String(f.severity)).join(", ")}):`);
+    for (const f of sorted.slice(0, 5)) {
+      const sev = String(f.severity);
+      const title = String(f.title ?? "untitled");
+      const evidencePaths = Array.isArray(f.evidence)
+        ? (f.evidence as Array<Record<string, unknown>>).map(e => String(e.path)).join(", ")
+        : "";
+      parts.push(`  ${sev}: ${title}${evidencePaths ? ` (${evidencePaths})` : ""}`);
+    }
+    if (sorted.length > 5) {
+      parts.push(`  ... and ${sorted.length - 5} more`);
+    }
+  }
+
+  return parts.join("\n");
+}
+
+function renderJobSummary(obj: Record<string, unknown>): string {
+  const state = String(obj.state);
+  const kind = String(obj.kind);
+  const role = String(obj.role);
+  const provider = typeof obj.provider === "string" ? obj.provider : "";
+  const elapsed = typeof obj.elapsedMs === "number" ? ` (${obj.elapsedMs}ms)` : "";
+  return `[${state}] ${kind}/${role}${provider ? ` via ${provider}` : ""}${elapsed}`;
 }

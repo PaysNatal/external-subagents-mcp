@@ -56,7 +56,13 @@ describe("MCP server", () => {
     const result = await client.callTool({ name: "delegate_wait", arguments: { job_ids: ["job_test"], timeout_ms: 1000 } });
 
     expect(result.structuredContent).toEqual({ items: [job] });
-    expect(JSON.parse(String(result.content?.[0]?.text))).toEqual([job]);
+    // Tool results now use dual-layer format: summary text + "---" separator + JSON
+    const text = String(result.content?.[0]?.text);
+    const jsonPart = text.split("\n---\n")[1] ?? text;
+    expect(JSON.parse(jsonPart)).toEqual([job]);
+    // Verify the compact summary layer is present for JobRecord objects
+    expect(text).toContain("[completed]");
+    expect(text).toContain("analyze_log(log_analyst)");
 
     await client.close();
     await server.close();
