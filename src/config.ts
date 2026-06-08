@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { ZodError, z } from "zod";
-import type { JobKind, RoleConfig, RoutingConfig, RoutingRule } from "./types.js";
+import type { BudgetRule, JobKind, RoleConfig, RoutingConfig, RoutingRule } from "./types.js";
 
 const DEFAULT_ALLOW = ["src/**", "tests/**", "docs/**", "package.json", "README.md"];
 const DEFAULT_DENY = [
@@ -63,11 +63,23 @@ const routingRuleSchema = z
   })
   .strict();
 
+const budgetRuleSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    role: z.string().min(1).optional(),
+    kind: jobKindsSchema.optional(),
+    min_input_bytes: z.number().int().nonnegative().optional(),
+    max_input_bytes: z.number().int().nonnegative().optional(),
+    max_output_tokens: z.number().int().positive()
+  })
+  .strict();
+
 const routingSchema = z
   .object({
     profile: z.string().min(1).optional(),
     mode: z.enum(["profile", "auto"]).default("profile"),
-    auto_rules: z.array(routingRuleSchema).default([])
+    auto_rules: z.array(routingRuleSchema).default([]),
+    budget_rules: z.array(budgetRuleSchema).default([])
   })
   .strict();
 
@@ -222,7 +234,8 @@ function normalizeRouting(rawRouting: z.infer<typeof routingSchema> | undefined,
   return {
     profile: rawRouting?.profile,
     mode: rawRouting?.mode ?? "profile",
-    autoRules: (rawRouting?.auto_rules ?? []).map(rule => normalizeRoutingRule(rule, providers))
+    autoRules: (rawRouting?.auto_rules ?? []).map(rule => normalizeRoutingRule(rule, providers)),
+    budgetRules: (rawRouting?.budget_rules ?? []).map(normalizeBudgetRule)
   };
 }
 
@@ -241,6 +254,21 @@ function normalizeRoutingRule(rule: z.infer<typeof routingRuleSchema>, providers
     ...(rule.max_input_bytes !== undefined ? { maxInputBytes: rule.max_input_bytes } : {}),
     provider: rule.provider,
     ...(rule.max_output_tokens !== undefined ? { maxOutputTokens: rule.max_output_tokens } : {})
+  };
+}
+
+function normalizeBudgetRule(rule: z.infer<typeof budgetRuleSchema>): BudgetRule {
+  if (rule.min_input_bytes !== undefined && rule.max_input_bytes !== undefined && rule.min_input_bytes > rule.max_input_bytes) {
+    throw new Error("Budget rule min_input_bytes must be less than or equal to max_input_bytes.");
+  }
+  const kinds = normalizeKinds(rule.kind);
+  return {
+    ...(rule.name ? { name: rule.name } : {}),
+    ...(rule.role ? { role: rule.role } : {}),
+    ...(kinds ? { kinds } : {}),
+    ...(rule.min_input_bytes !== undefined ? { minInputBytes: rule.min_input_bytes } : {}),
+    ...(rule.max_input_bytes !== undefined ? { maxInputBytes: rule.max_input_bytes } : {}),
+    maxOutputTokens: rule.max_output_tokens
   };
 }
 

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
-import type { CachedJobResult, JobKind, JobRecord, JobState, ProviderClient, RoleConfig, RoutingConfig } from "./types.js";
+import type { BudgetRule, CachedJobResult, JobKind, JobRecord, JobState, ProviderClient, RoleConfig, RoutingConfig } from "./types.js";
 
 export interface StartJobInput {
   kind: JobKind;
@@ -20,6 +20,12 @@ interface QueuedJob extends JobRecord {
   maxOutputTokens?: number;
   onComplete?: (job: JobRecord) => Promise<void>;
   abortController: AbortController;
+}
+
+interface RouteSelection {
+  provider: string;
+  maxOutputTokens: number;
+  budgetSource: string;
 }
 
 export interface JobManagerOptions {
@@ -46,6 +52,8 @@ export class JobManager {
     }
     const inputBytes = input.inputBytes ?? Buffer.byteLength(input.prompt, "utf8");
     const route = this.selectRoute(input.kind, input.role, role, inputBytes);
+    const maxOutputTokens = input.maxOutputTokens ?? route.maxOutputTokens;
+    const budgetSource = input.maxOutputTokens !== undefined ? "input:output_budget" : route.budgetSource;
 
     const now = new Date().toISOString();
     if (input.cached) {
@@ -62,6 +70,8 @@ export class JobManager {
         cacheHit: true,
         elapsedMs: 0,
         report: input.cached.report,
+        maxOutputTokens,
+        budgetSource,
         prompt: "",
         abortController: new AbortController()
       };
@@ -82,7 +92,8 @@ export class JobManager {
       cacheHit: false,
       prompt: input.prompt,
       inputHash: input.inputHash,
-      maxOutputTokens: input.maxOutputTokens ?? route.maxOutputTokens,
+      maxOutputTokens,
+      budgetSource,
       onComplete: input.onComplete,
       abortController: new AbortController()
     };
@@ -197,23 +208,37 @@ export class JobManager {
     }
   }
 
-  private selectRoute(kind: JobKind, roleName: string, role: RoleConfig, inputBytes: number): { provider: string; maxOutputTokens: number } {
-    const fallback = { provider: role.provider, maxOutputTokens: role.maxOutputTokens };
-    if (this.options.routing?.mode !== "auto") {
-      return fallback;
+  private selectRoute(kind: JobKind, roleName: string, role: RoleConfig, inputBytes: number): RouteSelection {
+    const route: RouteSelection = {
+      provider: role.provider,
+      maxOutputTokens: role.maxOutputTokens,
+      budgetSource: `role:${roleName}`
+    };
+
+    if (this.options.routing?.mode === "auto") {
+      for (const rule of this.options.routing.autoRules) {
+        if (!ruleMatches(rule, kind, roleName, inputBytes)) {
+          continue;
+        }
+        route.provider = rule.provider;
+        if (rule.maxOutputTokens !== undefined) {
+          route.maxOutputTokens = rule.maxOutputTokens;
+          route.budgetSource = `auto_rule:${routingRuleLabel(rule)}`;
+        }
+        break;
+      }
     }
 
-    for (const rule of this.options.routing.autoRules) {
-      if (!routeRuleMatches(rule, kind, roleName, inputBytes)) {
+    for (const rule of this.options.routing?.budgetRules ?? []) {
+      if (!ruleMatches(rule, kind, roleName, inputBytes)) {
         continue;
       }
-      return {
-        provider: rule.provider,
-        maxOutputTokens: rule.maxOutputTokens ?? role.maxOutputTokens
-      };
+      route.maxOutputTokens = rule.maxOutputTokens;
+      route.budgetSource = `budget_rule:${budgetRuleLabel(rule)}`;
+      break;
     }
 
-    return fallback;
+    return route;
   }
 
   private resolveProvider(roleName: string, providerName: string): ProviderClient {
@@ -229,8 +254,8 @@ export class JobManager {
   }
 }
 
-function routeRuleMatches(
-  rule: NonNullable<RoutingConfig["autoRules"]>[number],
+function ruleMatches(
+  rule: Pick<BudgetRule | NonNullable<RoutingConfig["autoRules"]>[number], "role" | "kinds" | "minInputBytes" | "maxInputBytes">,
   kind: JobKind,
   roleName: string,
   inputBytes: number
@@ -250,9 +275,64 @@ function routeRuleMatches(
   return true;
 }
 
+function routingRuleLabel(rule: NonNullable<RoutingConfig["autoRules"]>[number]): string {
+  if (rule.kinds?.length) {
+    return rule.kinds.join(",");
+  }
+  if (rule.role) {
+    return `role:${rule.role}`;
+  }
+  return rule.provider;
+}
+
+function budgetRuleLabel(rule: BudgetRule): string {
+  if (rule.name) {
+    return rule.name;
+  }
+  if (rule.kinds?.length) {
+    return rule.kinds.join(",");
+  }
+  if (rule.role) {
+    return `role:${rule.role}`;
+  }
+  return "default";
+}
+
 function publicJob(job: QueuedJob | JobRecord): JobRecord {
-  const { id, kind, role, provider, state, createdAt, startedAt, completedAt, cacheKey, cacheHit, elapsedMs, error, report } = job;
-  return { id, kind, role, provider, state, createdAt, startedAt, completedAt, cacheKey, cacheHit, elapsedMs, error, report };
+  const {
+    id,
+    kind,
+    role,
+    provider,
+    state,
+    createdAt,
+    startedAt,
+    completedAt,
+    cacheKey,
+    cacheHit,
+    elapsedMs,
+    error,
+    report,
+    maxOutputTokens,
+    budgetSource
+  } = job;
+  return {
+    id,
+    kind,
+    role,
+    provider,
+    state,
+    createdAt,
+    startedAt,
+    completedAt,
+    cacheKey,
+    cacheHit,
+    elapsedMs,
+    error,
+    report,
+    maxOutputTokens,
+    budgetSource
+  };
 }
 
 function isFinal(state: JobState): boolean {

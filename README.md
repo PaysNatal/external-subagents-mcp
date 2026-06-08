@@ -68,6 +68,12 @@ Create `.external-subagents-mcp.json` in your project root, or set `EXTERNAL_SUB
     "auto_rules": [
       { "kind": "find_relevant_files", "provider": "fast", "max_output_tokens": 1200 },
       { "role": "log_analyst", "min_input_bytes": 100000, "provider": "glm", "max_output_tokens": 3000 }
+    ],
+    "budget_rules": [
+      { "name": "long_logs", "role": "log_analyst", "min_input_bytes": 20000, "max_output_tokens": 3500 },
+      { "name": "huge_logs", "role": "log_analyst", "min_input_bytes": 80000, "max_output_tokens": 5000 },
+      { "name": "large_reviews", "kind": "review_diff", "min_input_bytes": 50000, "max_output_tokens": 5000 },
+      { "name": "large_summaries", "kind": "summarize_paths", "min_input_bytes": 50000, "max_output_tokens": 4500 }
     ]
   },
   "profiles": {
@@ -153,6 +159,32 @@ Set the active strategy with:
 
 API keys are lazy by provider use. Missing keys do not prevent server startup; a job fails clearly only if it routes to a provider whose `api_key_env` is not set. Cached results can still be read without the provider key.
 
+### Dynamic output budgets
+
+Use `routing.budget_rules` to raise `max_output_tokens` for large or complex tasks without changing the selected provider and without compressing or rewriting inputs.
+
+```json
+{
+  "routing": {
+    "budget_rules": [
+      { "name": "long_logs", "role": "log_analyst", "min_input_bytes": 20000, "max_output_tokens": 3500 },
+      { "name": "huge_logs", "role": "log_analyst", "min_input_bytes": 80000, "max_output_tokens": 5000 },
+      { "name": "large_reviews", "kind": "review_diff", "min_input_bytes": 50000, "max_output_tokens": 5000 },
+      { "name": "large_summaries", "kind": "summarize_paths", "min_input_bytes": 50000, "max_output_tokens": 4500 }
+    ]
+  }
+}
+```
+
+Budget precedence is:
+
+1. Tool input `output_budget`
+2. First matching `routing.budget_rules` entry
+3. Matching `auto_rules.max_output_tokens`
+4. Role/profile default `max_output_tokens`
+
+Job records include `maxOutputTokens` and `budgetSource`, so Codex can see whether a budget came from `input:output_budget`, `budget_rule:<name>`, `auto_rule:<rule>`, or `role:<role>`.
+
 ## Provider diagnostics
 
 Use `doctor` before connecting Codex or after changing keys/base URLs:
@@ -203,7 +235,7 @@ For local development, point Codex at the built CLI:
 [mcp_servers.external_subagents]
 command = "node"
 args = ["/absolute/path/to/external-subagents-mcp/dist/index.js"]
-env_vars = ["ZAI_API_KEY", "MIMO_API_KEY", "EXTERNAL_SUBAGENTS_CONFIG"]
+env_vars = ["ZAI_API_KEY", "MIMO_API_KEY", "FAST_API_KEY", "EXTERNAL_SUBAGENTS_CONFIG"]
 ```
 
 ## Tools

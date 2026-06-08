@@ -144,4 +144,39 @@ describe("normalizeConfig", () => {
       { role: "log_analyst", minInputBytes: 100000, provider: "long_context", maxOutputTokens: 4000 }
     ]);
   });
+
+  it("normalizes dynamic budget rules separately from provider routing", () => {
+    const config = normalizeConfig(
+      {
+        routing: {
+          profile: "mimo_only",
+          budget_rules: [
+            { name: "long_logs", role: "log_analyst", min_input_bytes: 20000, max_output_tokens: 3500 },
+            { name: "huge_reviews", kind: ["review_diff", "summarize_paths"], min_input_bytes: 80000, max_output_tokens: 6000 }
+          ]
+        },
+        providers: {
+          mimo: {
+            base_url: "https://example.test/v1",
+            api_key_env: "MIMO_API_KEY",
+            model: "mimo-v2.5-pro"
+          }
+        },
+        profiles: {
+          mimo_only: {
+            summarizer: "mimo",
+            reviewer: "mimo",
+            log_analyst: "mimo",
+            file_finder: "mimo"
+          }
+        }
+      },
+      "/repo"
+    );
+
+    expect(config.routing.budgetRules).toEqual([
+      { name: "long_logs", role: "log_analyst", minInputBytes: 20000, maxOutputTokens: 3500 },
+      { name: "huge_reviews", kinds: ["review_diff", "summarize_paths"], minInputBytes: 80000, maxOutputTokens: 6000 }
+    ]);
+  });
 });

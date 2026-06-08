@@ -28,9 +28,19 @@ export interface ProviderStatusReport {
   routing: {
     profile?: string;
     mode: string;
+    budget_rules?: BudgetRuleDiagnostic[];
   };
   providers: ProviderDiagnostic[];
   issues: ProviderDiagnosticIssue[];
+}
+
+export interface BudgetRuleDiagnostic {
+  name?: string;
+  role?: string;
+  kinds?: JobKind[];
+  min_input_bytes?: number;
+  max_input_bytes?: number;
+  max_output_tokens: number;
 }
 
 export interface ProviderSmokeInput {
@@ -78,10 +88,22 @@ export function buildProviderStatusReport(config: NormalizedConfig, env: NodeJS.
     ...(config.configPath ? { config_path: config.configPath } : {}),
     routing: {
       ...(config.routing.profile ? { profile: config.routing.profile } : {}),
-      mode: config.routing.mode
+      mode: config.routing.mode,
+      ...(config.routing.budgetRules.length ? { budget_rules: config.routing.budgetRules.map(formatBudgetRule) } : {})
     },
     providers,
     issues
+  };
+}
+
+function formatBudgetRule(rule: NormalizedConfig["routing"]["budgetRules"][number]): BudgetRuleDiagnostic {
+  return {
+    ...(rule.name ? { name: rule.name } : {}),
+    ...(rule.role ? { role: rule.role } : {}),
+    ...(rule.kinds ? { kinds: rule.kinds } : {}),
+    ...(rule.minInputBytes !== undefined ? { min_input_bytes: rule.minInputBytes } : {}),
+    ...(rule.maxInputBytes !== undefined ? { max_input_bytes: rule.maxInputBytes } : {}),
+    max_output_tokens: rule.maxOutputTokens
   };
 }
 

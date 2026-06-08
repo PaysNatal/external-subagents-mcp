@@ -48,6 +48,15 @@ export type JobKind = "review_diff" | "summarize_paths" | "find_relevant_files" 
 
 export type RoutingMode = "profile" | "auto";
 
+export interface BudgetRule {
+  name?: string;
+  role?: string;
+  kinds?: JobKind[];
+  minInputBytes?: number;
+  maxInputBytes?: number;
+  maxOutputTokens: number;
+}
+
 export interface RoutingRule {
   role?: string;
   kinds?: JobKind[];
@@ -61,6 +70,7 @@ export interface RoutingConfig {
   profile?: string;
   mode: RoutingMode;
   autoRules: RoutingRule[];
+  budgetRules: BudgetRule[];
 }
 
 export type JobState = "queued" | "running" | "completed" | "failed" | "cancelled";
@@ -79,6 +89,8 @@ export interface JobRecord {
   elapsedMs?: number;
   error?: string;
   report?: DelegateReport;
+  maxOutputTokens?: number;
+  budgetSource?: string;
 }
 
 export interface CachedJobResult {

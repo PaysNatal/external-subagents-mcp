@@ -9,7 +9,8 @@ describe("provider diagnostics", () => {
         routing: {
           profile: "code_quality_first",
           mode: "auto",
-          auto_rules: [{ kind: "find_relevant_files", provider: "fast" }]
+          auto_rules: [{ kind: "find_relevant_files", provider: "fast" }],
+          budget_rules: [{ name: "long_logs", role: "log_analyst", min_input_bytes: 20000, max_output_tokens: 3500 }]
         },
         providers: {
           mimo: {
@@ -51,7 +52,13 @@ describe("provider diagnostics", () => {
     });
 
     expect(report.status).toBe("WARN");
-    expect(report.routing).toEqual({ profile: "code_quality_first", mode: "auto" });
+    expect(report.routing).toEqual({
+      profile: "code_quality_first",
+      mode: "auto",
+      budget_rules: [
+        { name: "long_logs", role: "log_analyst", min_input_bytes: 20000, max_output_tokens: 3500 }
+      ]
+    });
     expect(report.providers.find(provider => provider.name === "mimo")).toMatchObject({
       key_status: "set",
       used_by: ["role:summarizer"]

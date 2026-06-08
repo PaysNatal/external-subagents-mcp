@@ -40,6 +40,12 @@
     "auto_rules": [
       { "kind": "find_relevant_files", "provider": "fast", "max_output_tokens": 1200 },
       { "role": "log_analyst", "min_input_bytes": 100000, "provider": "glm", "max_output_tokens": 3000 }
+    ],
+    "budget_rules": [
+      { "name": "long_logs", "role": "log_analyst", "min_input_bytes": 20000, "max_output_tokens": 3500 },
+      { "name": "huge_logs", "role": "log_analyst", "min_input_bytes": 80000, "max_output_tokens": 5000 },
+      { "name": "large_reviews", "kind": "review_diff", "min_input_bytes": 50000, "max_output_tokens": 5000 },
+      { "name": "large_summaries", "kind": "summarize_paths", "min_input_bytes": 50000, "max_output_tokens": 4500 }
     ]
   },
   "profiles": {

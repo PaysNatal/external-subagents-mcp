@@ -119,4 +119,88 @@ describe("JobManager", () => {
     await manager.wait([job.id], 1000);
     expect(longContext.runReport).toHaveBeenCalledOnce();
   });
+
+  it("applies dynamic budget rules without changing the selected provider", async () => {
+    const report: DelegateReport = {
+      status: "DONE",
+      summary: "finished",
+      findings: [],
+      next_actions: [],
+      omitted: []
+    };
+    const provider: ProviderClient = {
+      name: "mimo",
+      runReport: vi.fn(async request => {
+        expect(request.maxOutputTokens).toBe(3500);
+        return report;
+      })
+    };
+    const manager = new JobManager({
+      providers: new Map([["mimo", provider]]),
+      roles: new Map([["log_analyst", { provider: "mimo", maxOutputTokens: 1200, max_output_tokens: 1200 }]]),
+      routing: {
+        mode: "profile",
+        budgetRules: [{ name: "long_logs", role: "log_analyst", minInputBytes: 10, maxOutputTokens: 3500 }],
+        autoRules: []
+      },
+      globalConcurrency: 1,
+      perProviderConcurrency: 1
+    });
+
+    const job = manager.start({
+      kind: "analyze_log",
+      role: "log_analyst",
+      prompt: "x".repeat(20),
+      inputBytes: 20,
+      cacheKey: undefined
+    });
+
+    expect(job.provider).toBe("mimo");
+    expect(job.maxOutputTokens).toBe(3500);
+    expect(job.budgetSource).toBe("budget_rule:long_logs");
+    await manager.wait([job.id], 1000);
+    expect(provider.runReport).toHaveBeenCalledOnce();
+  });
+
+  it("lets explicit tool output budgets override dynamic budget rules", async () => {
+    const report: DelegateReport = {
+      status: "DONE",
+      summary: "finished",
+      findings: [],
+      next_actions: [],
+      omitted: []
+    };
+    const provider: ProviderClient = {
+      name: "mimo",
+      runReport: vi.fn(async request => {
+        expect(request.maxOutputTokens).toBe(900);
+        return report;
+      })
+    };
+    const manager = new JobManager({
+      providers: new Map([["mimo", provider]]),
+      roles: new Map([["log_analyst", { provider: "mimo", maxOutputTokens: 1200, max_output_tokens: 1200 }]]),
+      routing: {
+        mode: "profile",
+        budgetRules: [{ name: "long_logs", role: "log_analyst", minInputBytes: 10, maxOutputTokens: 3500 }],
+        autoRules: []
+      },
+      globalConcurrency: 1,
+      perProviderConcurrency: 1
+    });
+
+    const job = manager.start({
+      kind: "analyze_log",
+      role: "log_analyst",
+      prompt: "x".repeat(20),
+      inputBytes: 20,
+      maxOutputTokens: 900,
+      cacheKey: undefined
+    });
+
+    expect(job.maxOutputTokens).toBe(900);
+    expect(job.budgetSource).toBe("input:output_budget");
+    await manager.wait([job.id], 1000);
+    expect(provider.runReport).toHaveBeenCalledOnce();
+  });
 });
