@@ -7,7 +7,8 @@
     "external-subagents-mcp": "./dist/index.js"
   },
   "files": [
-    "dist",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
     "README.md",
     "LICENSE",
     ".external-subagents-mcp.example.json"
@@ -25,10 +26,19 @@
     "subagents",
     "openai-compatible",
     "glm",
-    "mimo"
+    "mimo",
+    "deepseek"
   ],
-  "author": "",
+  "author": "PaysNatal",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PaysNatal/external-subagents-mcp.git"
+  },
+  "homepage": "https://github.com/PaysNatal/external-subagents-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/PaysNatal/external-subagents-mcp/issues"
+  },
   "engines": {
     "node": ">=20"
   },

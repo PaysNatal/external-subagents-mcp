@@ -9,6 +9,8 @@ export interface EvidenceLocation {
 }
 
 export interface DelegateFinding {
+  phase?: string;
+  depends_on?: string[];
   severity: FindingSeverity;
   title: string;
   description: string;

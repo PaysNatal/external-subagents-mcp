@@ -13,6 +13,8 @@ export const delegateReportSchema = z.object({
   findings: z
     .array(
       z.object({
+        phase: z.string().optional(),
+        depends_on: z.array(z.string()).default([]),
         severity: z.enum(["info", "low", "medium", "high"]),
         title: z.string(),
         description: z.string(),
@@ -63,6 +65,8 @@ export const REPORT_CONTRACT = `Return ONLY a JSON object with this shape:
   "summary": "short answer for Codex",
   "findings": [
     {
+      "phase": "discovery | analysis | verification | recommendation",
+      "depends_on": ["phase#index of findings this one builds on, e.g. \"discovery#0\""],
       "severity": "info | low | medium | high",
       "title": "finding title",
       "description": "what was found",
@@ -73,4 +77,6 @@ export const REPORT_CONTRACT = `Return ONLY a JSON object with this shape:
   ],
   "next_actions": ["specific verification step"],
   "omitted": ["files or chunks not sent and why"]
-}`;
+}
+
+phase and depends_on are optional but recommended. Use phase to label each finding's reasoning stage. Use depends_on to indicate which earlier findings this finding's conclusion depends on, so Codex can audit whether the reasoning chain is internally consistent before acting on the report.`;
