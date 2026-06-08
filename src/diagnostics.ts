@@ -1,5 +1,5 @@
 import type { NormalizedConfig } from "./config.js";
-import { OpenAICompatibleProvider } from "./provider.js";
+import { OpenAICompatibleProvider, resolveChatCompletionsUrl } from "./provider.js";
 import type { DelegateReport, JobKind, RoutingRule } from "./types.js";
 
 export type DiagnosticStatus = "OK" | "WARN" | "ERROR";
@@ -8,6 +8,7 @@ export type ProviderKeyStatus = "set" | "missing";
 export interface ProviderDiagnostic {
   name: string;
   base_url: string;
+  chat_completions_url: string;
   model: string;
   api_key_env: string;
   key_status: ProviderKeyStatus;
@@ -76,6 +77,7 @@ export function buildProviderStatusReport(config: NormalizedConfig, env: NodeJS.
     return {
       name,
       base_url: providerConfig.base_url,
+      chat_completions_url: resolveChatCompletionsUrl(providerConfig.base_url, providerConfig.chat_completions_path),
       model: providerConfig.model,
       api_key_env: providerConfig.api_key_env,
       key_status: keyStatus,
@@ -135,6 +137,7 @@ export async function smokeProvider(
   const provider = new OpenAICompatibleProvider({
     name: input.provider,
     baseUrl: providerConfig.base_url,
+    chatCompletionsPath: providerConfig.chat_completions_path,
     apiKey,
     model: providerConfig.model,
     timeoutMs: providerConfig.timeout_ms,

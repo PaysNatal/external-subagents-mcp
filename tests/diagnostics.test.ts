@@ -25,6 +25,7 @@ describe("provider diagnostics", () => {
           },
           fast: {
             base_url: "https://example.test/v1",
+            chat_completions_path: "openai/chat/completions",
             api_key_env: "FAST_API_KEY",
             model: "fast-code"
           },
@@ -69,6 +70,7 @@ describe("provider diagnostics", () => {
       "role:file_finder"
     ]);
     expect(report.providers.find(provider => provider.name === "fast")).toMatchObject({
+      chat_completions_url: "https://example.test/v1/openai/chat/completions",
       key_status: "missing",
       used_by: ["auto_rule:find_relevant_files"]
     });

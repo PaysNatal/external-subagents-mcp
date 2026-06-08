@@ -106,6 +106,53 @@ export ZAI_API_KEY=...
 export MIMO_API_KEY=...
 ```
 
+### OpenAI-compatible provider URLs
+
+Each provider uses the standard chat-completions wire format by default:
+
+- `base_url` is the provider or plan base URL.
+- `chat_completions_path` is optional and defaults to `chat/completions`.
+- The final request URL is normally `<base_url>/chat/completions`.
+- If `base_url` already ends with `/chat/completions`, the server will not append it a second time.
+- For nonstandard endpoints, set `chat_completions_path` explicitly.
+
+Examples:
+
+```json
+{
+  "providers": {
+    "deepseek": {
+      "base_url": "https://api.deepseek.com",
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "model": "deepseek-chat"
+    },
+    "mimo": {
+      "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+      "api_key_env": "MIMO_API_KEY",
+      "model": "mimo-v2.5-pro"
+    },
+    "minimax": {
+      "base_url": "https://api.minimax.io/v1",
+      "chat_completions_path": "text/chatcompletion_v2",
+      "api_key_env": "MINIMAX_API_KEY",
+      "model": "MiniMax-M3"
+    },
+    "qwen": {
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key_env": "DASHSCOPE_API_KEY",
+      "model": "qwen-plus"
+    },
+    "hunyuan": {
+      "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
+      "api_key_env": "HUNYUAN_API_KEY",
+      "model": "hunyuan-turbos-latest"
+    }
+  }
+}
+```
+
+These are starting points, not vendor-specific adapters. Always use the Base URL, model name, and API key environment variable from your own provider console or plan page, then run `doctor --json` to confirm the computed `chat_completions_url` and `smoke --provider <name>` to verify a real call.
+
 For MiMo Token Plan, set `base_url` to the Base URL shown on the subscription page. Current regional examples are:
 
 - China: `https://token-plan-cn.xiaomimimo.com/v1`
@@ -125,6 +172,10 @@ Official references:
 
 - Z.AI API introduction: https://docs.z.ai/api-reference/introduction
 - MiMo Token Plan subscription instructions: https://platform.xiaomimimo.com/docs/en-US/tokenplan/subscription
+- DeepSeek API quick start: https://api-docs.deepseek.com/
+- MiniMax text generation endpoint: https://platform.minimax.io/docs/api-reference/text-post
+- Qwen/DashScope OpenAI-compatible chat: https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions
+- Tencent Hunyuan OpenAI-compatible examples: https://cloud.tencent.com/document/product/1729/111007
 
 ### Profiles and routing
 
@@ -197,6 +248,7 @@ external-subagents-mcp doctor --json
 The report shows:
 
 - which providers are configured
+- each provider's computed `chat_completions_url`
 - which providers are used by the active profile or auto rules
 - which `api_key_env` variables are set or missing
 - issues without printing secrets

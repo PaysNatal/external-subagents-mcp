@@ -30,6 +30,7 @@ const DEFAULT_DENY = [
 const providerSchema = z
   .object({
     base_url: z.string().url(),
+    chat_completions_path: z.string().min(1).optional(),
     api_key_env: z.string().min(1),
     api_key: z.never().optional(),
     model: z.string().min(1),

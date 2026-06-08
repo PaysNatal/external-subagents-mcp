@@ -21,6 +21,7 @@ export function createAppFromConfig(config: NormalizedConfig, env: NodeJS.Proces
       new OpenAICompatibleProvider({
         name,
         baseUrl: providerConfig.base_url,
+        chatCompletionsPath: providerConfig.chat_completions_path,
         apiKey,
         model: providerConfig.model,
         timeoutMs: providerConfig.timeout_ms

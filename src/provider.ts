@@ -4,6 +4,7 @@ import type { DelegateReport, ProviderClient, ProviderRunRequest } from "./types
 export interface ProviderOptions {
   name: string;
   baseUrl: string;
+  chatCompletionsPath?: string;
   apiKey: string;
   model: string;
   timeoutMs?: number;
@@ -22,11 +23,13 @@ export class OpenAICompatibleProvider implements ProviderClient {
   readonly name: string;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly chatCompletionsUrl: string;
 
   constructor(private readonly options: ProviderOptions) {
     this.name = options.name;
     this.fetchImpl = options.fetch ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 120000;
+    this.chatCompletionsUrl = resolveChatCompletionsUrl(options.baseUrl, options.chatCompletionsPath);
   }
 
   async runReport(request: ProviderRunRequest): Promise<DelegateReport> {
@@ -35,7 +38,7 @@ export class OpenAICompatibleProvider implements ProviderClient {
     const signal = request.signal ? AbortSignal.any([request.signal, controller.signal]) : controller.signal;
 
     try {
-      const response = await this.fetchImpl(new URL("chat/completions", ensureTrailingSlash(this.options.baseUrl)), {
+      const response = await this.fetchImpl(new URL(this.chatCompletionsUrl), {
         method: "POST",
         headers: {
           authorization: `Bearer ${this.options.apiKey}`,
@@ -80,8 +83,29 @@ export class OpenAICompatibleProvider implements ProviderClient {
   }
 }
 
+export function resolveChatCompletionsUrl(baseUrl: string, chatCompletionsPath = "chat/completions"): string {
+  const endpointPath = stripSlashes(chatCompletionsPath);
+  const parsed = new URL(baseUrl);
+  const basePath = stripTrailingSlash(parsed.pathname);
+
+  if (endpointPath && (basePath === `/${endpointPath}` || basePath.endsWith(`/${endpointPath}`))) {
+    parsed.pathname = basePath;
+    return parsed.toString();
+  }
+
+  return new URL(endpointPath, ensureTrailingSlash(baseUrl)).toString();
+}
+
 function ensureTrailingSlash(url: string): string {
   return url.endsWith("/") ? url : `${url}/`;
+}
+
+function stripSlashes(value: string): string {
+  return value.replace(/^\/+|\/+$/g, "");
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/+$/g, "") || "/";
 }
 
 async function safeBody(response: Response): Promise<string> {

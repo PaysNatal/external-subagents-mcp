@@ -179,4 +179,25 @@ describe("normalizeConfig", () => {
       { name: "huge_reviews", kinds: ["review_diff", "summarize_paths"], minInputBytes: 80000, maxOutputTokens: 6000 }
     ]);
   });
+
+  it("accepts a custom chat completions path for providers with nonstandard endpoints", () => {
+    const config = normalizeConfig(
+      {
+        providers: {
+          minimax: {
+            base_url: "https://api.minimax.io/v1",
+            chat_completions_path: "text/chatcompletion_v2",
+            api_key_env: "MINIMAX_API_KEY",
+            model: "MiniMax-M1"
+          }
+        },
+        roles: {
+          summarizer: "minimax"
+        }
+      },
+      "/repo"
+    );
+
+    expect(config.providers.minimax.chat_completions_path).toBe("text/chatcompletion_v2");
+  });
 });
