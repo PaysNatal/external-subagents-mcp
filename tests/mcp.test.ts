@@ -15,6 +15,7 @@ describe("MCP server", () => {
     const tools = await client.listTools();
 
     expect(SERVER_INSTRUCTIONS).toContain("read-only external model delegates");
+    expect(SERVER_INSTRUCTIONS).toContain("Tool selection guide");
     expect(tools.tools.map(tool => tool.name).sort()).toEqual(
       [
         "delegate_analyze_log",

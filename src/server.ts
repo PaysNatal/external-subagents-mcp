@@ -3,17 +3,23 @@ import * as z from "zod/v4";
 import type { ExternalSubagentsApp } from "./app.js";
 import type { JobRecord } from "./types.js";
 
-export const SERVER_INSTRUCTIONS = `external-subagents-mcp provides read-only external model delegates for Codex.
+export const SERVER_INSTRUCTIONS = `external-subagents-mcp: read-only external model delegates for Codex.
 
-Use these tools for large-context review, summarization, triage, log analysis, and file discovery. Do not use them for implementation, patching, shell commands, migrations, formatting, or test execution.
+All task tools (summarize, review, find_files, analyze_log) return a job record. Use delegate_wait then delegate_result to retrieve the structured report. Do not use these tools for implementation, patching, shell commands, migrations, formatting, or test execution.
 
 The external model output is advisory. Codex must verify cited files and line numbers before changing code.
 
-Use provider status and smoke-test tools to diagnose API keys, active routing, base URLs, and model IDs before delegating expensive work.
+Use delegate_provider_status and delegate_provider_smoke to check API keys, routing, and model connectivity before delegating expensive work.
 
-When following Superpowers-style workflows such as dispatching-parallel-agents or subagent-driven-development, these tools can serve as external explorer, reviewer, file_finder, summarizer, and log_analyst delegates. They must not serve as implementers.`;
+Tool selection guide:
+- summarize or compress files → delegate_summarize_paths
+- review code or diff → delegate_review_diff
+- search or locate relevant files → delegate_find_relevant_files
+- debug or analyze errors, logs, crashes → delegate_analyze_log
 
-const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_write");
+These tools must not serve as implementers.`;
+
+const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_write").describe("Cache behavior: read_write (default — cache and reuse), read_only (reuse but don't write new entries), skip (no cache)");
 
 export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   const server = new McpServer(
@@ -24,9 +30,9 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   server.registerTool(
     "delegate_provider_status",
     {
-      title: "Inspect provider routing and API key status",
+      title: "Check provider routing and API key setup",
       description:
-        "Return a diagnostic report for configured providers, active roles, auto routing rules, and missing API key environment variables. Does not expose secrets.",
+        "Check which providers are configured, which API keys are set or missing, and which roles route to which providers. Does not expose secrets. Use before delegating work to verify connectivity.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       inputSchema: {}
     },
@@ -38,11 +44,11 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Smoke-test one provider",
       description:
-        "Send a minimal chat completion request to one configured provider to verify base_url, API key, model ID, and JSON report compatibility.",
+        "Send a minimal chat completion request to verify that one provider's base_url, API key, model ID, and report format are working. Use after delegate_provider_status to confirm connectivity before delegating expensive work.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
-        provider: z.string().min(1),
-        max_output_tokens: z.number().int().positive().optional()
+        provider: z.string().min(1).describe("Provider name from config, e.g. 'glm', 'mimo', 'deepseek'"),
+        max_output_tokens: z.number().int().positive().optional().describe("Token limit for the smoke-test response")
       }
     },
     async ({ provider, max_output_tokens }) => toolResult(await app.providerSmoke({ provider, maxOutputTokens: max_output_tokens }))
@@ -51,15 +57,15 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   server.registerTool(
     "delegate_summarize_paths",
     {
-      title: "Delegate path summarization",
+      title: "Summarize workspace files",
       description:
-        "Read allowed workspace files and delegate summarization to an external OpenAI-compatible model. Returns an async job record.",
+        "Read and summarize the specified files. Use to compress, digest, or condense file content for Codex context when reviewing large codebases or understanding unfamiliar projects.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
-        paths: z.array(z.string()).min(1),
-        focus: z.string().min(1),
-        output_budget: z.number().int().positive().optional(),
-        cache_mode: cacheMode.optional()
+        paths: z.array(z.string().min(1)).min(1).describe("Relative paths of files to summarize, e.g. ['src/app.ts', 'src/config.ts']"),
+        focus: z.string().min(1).describe("What to focus on in the summary, e.g. 'security vulnerabilities', 'API contracts', 'error handling patterns'"),
+        output_budget: z.number().int().positive().optional().describe("Max output tokens for the summary report"),
+        cache_mode: cacheMode.optional().describe("Cache behavior: read_write (default), read_only (use cache but don't write), skip (no cache)")
       }
     },
     async input => toolResult(await app.delegateSummarizePaths(input))
@@ -68,18 +74,18 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   server.registerTool(
     "delegate_review_diff",
     {
-      title: "Delegate diff review",
+      title: "Review code diff",
       description:
-        "Delegate a read-only review of supplied diff text and optional allowed file context. This server does not run git commands.",
+        "Review a code diff for correctness, security, missing tests, regressions, and maintainability. Supply diff_text directly; this server does not run git commands. Optionally include paths for surrounding file context.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
-        base_ref: z.string().optional(),
-        target_ref: z.string().optional(),
-        diff_text: z.string().optional(),
-        focus: z.string().min(1),
-        paths: z.array(z.string()).optional(),
-        output_budget: z.number().int().positive().optional(),
-        cache_mode: cacheMode.optional()
+        base_ref: z.string().optional().describe("Base git ref for context, e.g. 'main' or 'HEAD~3' (informational only, server does not run git)"),
+        target_ref: z.string().optional().describe("Target git ref for context, e.g. 'feature-branch' (informational only)"),
+        diff_text: z.string().optional().describe("The diff content to review, in unified diff format"),
+        focus: z.string().min(1).describe("What to focus on in the review, e.g. 'security risks', 'breaking changes', 'performance regressions'"),
+        paths: z.array(z.string()).optional().describe("Relative paths of files to include as surrounding context for the diff"),
+        output_budget: z.number().int().positive().optional().describe("Max output tokens for the review report"),
+        cache_mode: cacheMode.optional().describe("Cache behavior: read_write (default), read_only, skip")
       }
     },
     async input => toolResult(await app.delegateReviewDiff(input))
@@ -88,17 +94,17 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   server.registerTool(
     "delegate_find_relevant_files",
     {
-      title: "Delegate relevant file discovery",
+      title: "Search for relevant files",
       description:
-        "List allowed workspace files and ask an external model to rank relevant candidates for a query. Returns an async job record.",
+        "Search, locate, or discover files in the workspace relevant to a query. The external model ranks candidate files by relevance. Use to find which files to read or review before diving into a large unfamiliar project.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
-        query: z.string().min(1),
-        globs: z.array(z.string()).optional(),
-        focus: z.string().min(1),
-        max_results: z.number().int().positive().max(1000).optional(),
-        output_budget: z.number().int().positive().optional(),
-        cache_mode: cacheMode.optional()
+        query: z.string().min(1).describe("What to search for, e.g. 'where is authentication handled', 'files related to payment processing'"),
+        globs: z.array(z.string()).optional().describe("Glob patterns to filter candidates, e.g. ['src/**/*.ts', 'tests/**/*.ts']"),
+        focus: z.string().min(1).describe("Focus aspect for ranking, e.g. 'implementation details', 'test coverage', 'error handling'"),
+        max_results: z.number().int().positive().max(1000).optional().describe("Max number of candidate files to return (default 200)"),
+        output_budget: z.number().int().positive().optional().describe("Max output tokens for the ranking report"),
+        cache_mode: cacheMode.optional().describe("Cache behavior: read_write (default), read_only, skip")
       }
     },
     async input => toolResult(await app.delegateFindRelevantFiles(input))
@@ -107,16 +113,16 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   server.registerTool(
     "delegate_analyze_log",
     {
-      title: "Delegate log analysis",
+      title: "Debug and analyze logs",
       description:
-        "Analyze supplied log text or an allowed log path using an external model. Returns likely causes and verification steps as an async job.",
+        "Debug, analyze, or troubleshoot log output. Identifies likely root causes, stack traces, and failure patterns. Supply log_text directly or log_path to read an allowed workspace log file.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
-        log_path: z.string().optional(),
-        log_text: z.string().optional(),
-        focus: z.string().min(1),
-        output_budget: z.number().int().positive().optional(),
-        cache_mode: cacheMode.optional()
+        log_path: z.string().optional().describe("Relative path to a log file in the workspace, e.g. 'logs/error.log'"),
+        log_text: z.string().optional().describe("Raw log text to analyze, if not reading from a file"),
+        focus: z.string().min(1).describe("What to focus on, e.g. 'root cause of crash', 'memory leak patterns', 'connection timeout errors'"),
+        output_budget: z.number().int().positive().optional().describe("Max output tokens for the analysis report"),
+        cache_mode: cacheMode.optional().describe("Cache behavior: read_write (default), read_only, skip")
       }
     },
     async input => toolResult(await app.delegateAnalyzeLog(input))
@@ -126,11 +132,11 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     "delegate_wait",
     {
       title: "Wait for delegate jobs",
-      description: "Wait for one or more async delegate jobs to finish or until timeout_ms elapses.",
+      description: "Wait for one or more delegate jobs to finish, or until timeout_ms elapses. Use after calling a task tool to retrieve the completed report.",
       annotations: { readOnlyHint: true, destructiveHint: false },
       inputSchema: {
-        job_ids: z.array(z.string()).min(1),
-        timeout_ms: z.number().int().positive().max(300000).default(30000)
+        job_ids: z.array(z.string().min(1)).min(1).describe("Job IDs returned by task tools, e.g. ['job_abc123']"),
+        timeout_ms: z.number().int().positive().max(300000).default(30000).describe("Max wait time in milliseconds (default 30000, max 300000)")
       }
     },
     async ({ job_ids, timeout_ms }) => toolResult(await app.wait(job_ids, timeout_ms))
@@ -140,10 +146,10 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     "delegate_result",
     {
       title: "Get delegate job result",
-      description: "Return a single delegate job record, including its structured report when complete.",
+      description: "Retrieve the structured report from a completed delegate job. Use after delegate_wait to get the findings, recommendations, and reasoning chain.",
       annotations: { readOnlyHint: true, destructiveHint: false },
       inputSchema: {
-        job_id: z.string().min(1)
+        job_id: z.string().min(1).describe("Job ID returned by a task tool, e.g. 'job_abc123'")
       }
     },
     async ({ job_id }) => {
@@ -159,10 +165,10 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     "delegate_status",
     {
       title: "List delegate job statuses",
-      description: "Return current delegate job statuses. With no job_ids, returns all known jobs in this server process.",
+      description: "List the state of all delegate jobs (queued, running, completed, failed, cancelled). With no job_ids, returns every job in this server process. Use to track progress of pending work.",
       annotations: { readOnlyHint: true, destructiveHint: false },
       inputSchema: {
-        job_ids: z.array(z.string()).optional()
+        job_ids: z.array(z.string()).optional().describe("Specific job IDs to check, or omit to list all jobs")
       }
     },
     async ({ job_ids }) => toolResult(app.status(job_ids))
@@ -172,10 +178,10 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     "delegate_cancel",
     {
       title: "Cancel delegate job",
-      description: "Cancel a queued or running delegate job. Completed results are left intact.",
+      description: "Cancel a queued or running delegate job. Completed or failed jobs are left intact. Use when you no longer need the result of a pending task.",
       annotations: { readOnlyHint: true, destructiveHint: false },
       inputSchema: {
-        job_id: z.string().min(1)
+        job_id: z.string().min(1).describe("Job ID to cancel, e.g. 'job_abc123'")
       }
     },
     async ({ job_id }) => toolResult(app.cancel(job_id))
