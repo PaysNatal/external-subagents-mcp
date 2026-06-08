@@ -1,10 +1,53 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { runCli } from "../src/cli.js";
+import { isCliCommand, runCli } from "../src/cli.js";
 
 describe("runCli", () => {
+  it("creates a starter config with init", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "external-subagents-init-"));
+    let stdout = "";
+    let stderr = "";
+
+    const code = await runCli(["init"], {
+      cwd: root,
+      stdout: text => {
+        stdout += text;
+      },
+      stderr: text => {
+        stderr += text;
+      }
+    });
+
+    const config = JSON.parse(await readFile(path.join(root, ".external-subagents-mcp.json"), "utf8"));
+    expect(code).toBe(0);
+    expect(stderr).toBe("");
+    expect(stdout).toContain("Created");
+    expect(config.routing.profile).toBe("single_provider");
+    expect(config.profiles.single_provider).toBeDefined();
+    expect(isCliCommand(["init"])).toBe(true);
+  });
+
+  it("does not overwrite an existing config with init", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "external-subagents-init-existing-"));
+    const configPath = path.join(root, ".external-subagents-mcp.json");
+    await writeFile(configPath, '{"keep":true}\n', "utf8");
+    let stderr = "";
+
+    const code = await runCli(["init"], {
+      cwd: root,
+      stdout: () => undefined,
+      stderr: text => {
+        stderr += text;
+      }
+    });
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("already exists");
+    expect(await readFile(configPath, "utf8")).toBe('{"keep":true}\n');
+  });
+
   it("prints provider diagnostics as JSON", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "external-subagents-cli-"));
     await writeFile(

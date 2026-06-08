@@ -2,381 +2,217 @@
 
 > [中文文档](#中文文档)
 
-A read-only MCP server that lets Codex delegate large-context review and summarization work to external OpenAI-compatible models such as GLM, MiMo, or DeepSeek.
+A read-only MCP server that lets Codex delegate large-context review, summarization, file discovery, and log analysis to external OpenAI-compatible models.
 
-Codex stays in charge of editing files, running shell commands, applying patches, approvals, and final judgment. External models act only as advisory explorer/reviewer/summarizer/log analyst delegates.
+Codex remains responsible for file edits, shell commands, patches, approvals, and final judgment. External models return advisory reports only.
 
-## Why MCP, not a Codex plugin?
+## Quick start
 
-This is distributed as an independent MCP server so users explicitly configure local file access, API keys, and model routing. That is a better fit for workflows that read local project files and call third-party model APIs.
+### 1. Install
 
-## Install
+Requires Node.js 20 or newer.
 
 ```bash
 npm install -g external-subagents-mcp
 ```
 
-During local development:
+### 2. Create the project config
+
+Run this in the root of the project that external models may read:
 
 ```bash
-npm install
-npm run build
+external-subagents-mcp init
 ```
 
-## Configure
+This creates `.external-subagents-mcp.json` with safe workspace defaults, a single-provider profile, and optional multi-provider profiles. It refuses to overwrite an existing config.
 
-Create `.external-subagents-mcp.json` in your project root, or set `EXTERNAL_SUBAGENTS_CONFIG` to an absolute config path.
+### 3. Configure your provider
 
-```json
-{
-  "workspace": {
-    "allow": ["src/**", "tests/**", "docs/**", "package.json", "README.md"],
-    "deny": ["**/.env*", "**/node_modules/**", "**/dist/**", "**/*.pem"],
-    "max_file_bytes": 262144,
-    "max_total_bytes": 2097152
-  },
-  "cache": {
-    "dir": ".external-subagents/cache",
-    "ttl_hours": 168,
-    "max_bytes": 524288000
-  },
-  "concurrency": {
-    "global": 3,
-    "per_provider": 2
-  },
-  "providers": {
-    "glm": {
-      "base_url": "https://api.z.ai/api/paas/v4",
-      "api_key_env": "ZAI_API_KEY",
-      "model": "glm-5.1",
-      "wire_api": "chat_completions"
-    },
-    "mimo": {
-      "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
-      "api_key_env": "MIMO_API_KEY",
-      "model": "mimo-v2.5-pro",
-      "wire_api": "chat_completions"
-    },
-    "fast": {
-      "base_url": "https://api.example.com/v1",
-      "api_key_env": "FAST_API_KEY",
-      "model": "fast-code-model",
-      "wire_api": "chat_completions"
-    }
-  },
-  "routing": {
-    "profile": "code_quality_first",
-    "mode": "auto",
-    "auto_rules": [
-      { "kind": "find_relevant_files", "provider": "fast", "max_output_tokens": 1200 },
-      { "role": "log_analyst", "min_input_bytes": 100000, "provider": "glm", "max_output_tokens": 3000 }
-    ],
-    "budget_rules": [
-      { "name": "long_logs", "role": "log_analyst", "min_input_bytes": 20000, "max_output_tokens": 3500 },
-      { "name": "huge_logs", "role": "log_analyst", "min_input_bytes": 80000, "max_output_tokens": 5000 },
-      { "name": "large_reviews", "kind": "review_diff", "min_input_bytes": 50000, "max_output_tokens": 5000 },
-      { "name": "large_summaries", "kind": "summarize_paths", "min_input_bytes": 50000, "max_output_tokens": 4500 }
-    ]
-  },
-  "profiles": {
-    "cost_first": {
-      "summarizer": "mimo",
-      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
-      "log_analyst": "mimo",
-      "file_finder": "mimo"
-    },
-    "code_quality_first": {
-      "summarizer": { "provider": "mimo", "max_output_tokens": 2000 },
-      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
-      "log_analyst": { "provider": "glm", "max_output_tokens": 2500 },
-      "file_finder": { "provider": "glm", "max_output_tokens": 1800 }
-    },
-    "balanced_three_model": {
-      "summarizer": "mimo",
-      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
-      "log_analyst": { "provider": "glm", "max_output_tokens": 2500 },
-      "file_finder": { "provider": "fast", "max_output_tokens": 1200 }
-    }
-  }
-}
-```
-
-API keys must stay in environment variables:
-
-```bash
-export ZAI_API_KEY=...
-export MIMO_API_KEY=...
-```
-
-### OpenAI-compatible provider URLs
-
-Each provider uses the standard chat-completions wire format by default:
-
-- `base_url` is the provider or plan base URL.
-- `chat_completions_path` is optional and defaults to `chat/completions`.
-- The final request URL is normally `<base_url>/chat/completions`.
-- If `base_url` already ends with `/chat/completions`, the server will not append it a second time.
-- For nonstandard endpoints, set `chat_completions_path` explicitly.
-
-Examples:
+Open `.external-subagents-mcp.json` and edit the provider you want to use:
 
 ```json
 {
   "providers": {
-    "deepseek": {
-      "base_url": "https://api.deepseek.com",
-      "api_key_env": "DEEPSEEK_API_KEY",
-      "model": "deepseek-chat"
-    },
-    "mimo": {
-      "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
-      "api_key_env": "MIMO_API_KEY",
-      "model": "mimo-v2.5-pro"
-    },
-    "minimax": {
-      "base_url": "https://api.minimax.io/v1",
-      "chat_completions_path": "text/chatcompletion_v2",
-      "api_key_env": "MINIMAX_API_KEY",
-      "model": "MiniMax-M3"
-    },
-    "qwen": {
-      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      "api_key_env": "DASHSCOPE_API_KEY",
-      "model": "qwen-plus"
-    },
-    "hunyuan": {
-      "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
-      "api_key_env": "HUNYUAN_API_KEY",
-      "model": "hunyuan-turbos-latest"
+    "primary": {
+      "base_url": "https://your-provider.example/v1",
+      "api_key_env": "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
+      "model": "your-model-name"
     }
   }
 }
 ```
 
-These are starting points, not vendor-specific adapters. Always use the Base URL, model name, and API key environment variable from your own provider console or plan page, then run `doctor --json` to confirm the computed `chat_completions_url` and `smoke --provider <name>` to verify a real call.
+Copy `base_url` and `model` from your provider's own documentation or console.
 
-For MiMo Token Plan, set `base_url` to the Base URL shown on the subscription page. Current regional examples are:
+- `base_url`: provider API base URL. The server normally appends `chat/completions`.
+- `model`: provider model identifier.
+- `api_key_env`: the environment variable name that will contain the API key. This is not the key itself.
+- `chat_completions_path`: optional. Set it only when the provider uses a nonstandard path.
 
-- China: `https://token-plan-cn.xiaomimimo.com/v1`
-- Singapore: `https://token-plan-sgp.xiaomimimo.com/v1`
-- Europe: `https://token-plan-ams.xiaomimimo.com/v1`
+Never put an API key inside `.external-subagents-mcp.json`.
 
-If you are testing MiMo only, point every role at `mimo` and only `MIMO_API_KEY` is required. The `model` value should match the model UID shown for your token plan when MiMo provides a plan-specific UID.
+### 4. Set API key environment variables
 
-Z.AI setup notes:
-
-- General OpenAI-compatible endpoint: `https://api.z.ai/api/paas/v4`
-- GLM Coding Plan endpoint: `https://api.z.ai/api/coding/paas/v4`
-- The Z.AI docs currently show `glm-5.1` with chat completions examples.
-- Prefer the Base URL shown in your Z.AI console or plan page, then verify with `smoke`.
-
-Official references:
-
-- Z.AI API introduction: https://docs.z.ai/api-reference/introduction
-- MiMo Token Plan subscription instructions: https://platform.xiaomimimo.com/docs/en-US/tokenplan/subscription
-- DeepSeek API quick start: https://api-docs.deepseek.com/
-- MiniMax text generation endpoint: https://platform.minimax.io/docs/api-reference/text-post
-- Qwen/DashScope OpenAI-compatible chat: https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions
-- Tencent Hunyuan OpenAI-compatible examples: https://cloud.tencent.com/document/product/1729/111007
-
-### Profiles and routing
-
-Use `profiles` when you have two or more providers and want a one-line strategy switch:
-
-- `cost_first`: MiMo handles bulk summary/log/file discovery; GLM handles code review.
-- `code_quality_first`: GLM handles code review, log analysis, and file discovery; MiMo handles bulk summarization.
-- `balanced_three_model`: a third fast/cheap model handles file discovery; GLM handles code judgment; MiMo handles summarization.
-
-Set the active strategy with:
+The name in `api_key_env` connects a provider config to an environment variable:
 
 ```json
-{
-  "routing": { "profile": "code_quality_first" }
-}
+"api_key_env": "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY"
 ```
 
-`routing.mode = "auto"` adds first-match provider selection rules on top of the active profile. Auto routing only chooses the provider and optional output budget. It does not summarize, compress, rewrite, or otherwise transform the prompt before sending it to the selected provider.
+The matching environment variable must contain the real secret.
 
-```json
-{
-  "routing": {
-    "profile": "code_quality_first",
-    "mode": "auto",
-    "auto_rules": [
-      { "kind": "find_relevant_files", "provider": "fast" },
-      { "role": "log_analyst", "min_input_bytes": 100000, "provider": "glm", "max_output_tokens": 3000 }
-    ]
-  }
-}
-```
-
-API keys are lazy by provider use. Missing keys do not prevent server startup; a job fails clearly only if it routes to a provider whose `api_key_env` is not set. Cached results can still be read without the provider key.
-
-### Dynamic output budgets
-
-Use `routing.budget_rules` to raise `max_output_tokens` for large or complex tasks without changing the selected provider and without compressing or rewriting inputs.
-
-```json
-{
-  "routing": {
-    "budget_rules": [
-      { "name": "long_logs", "role": "log_analyst", "min_input_bytes": 20000, "max_output_tokens": 3500 },
-      { "name": "huge_logs", "role": "log_analyst", "min_input_bytes": 80000, "max_output_tokens": 5000 },
-      { "name": "large_reviews", "kind": "review_diff", "min_input_bytes": 50000, "max_output_tokens": 5000 },
-      { "name": "large_summaries", "kind": "summarize_paths", "min_input_bytes": 50000, "max_output_tokens": 4500 }
-    ]
-  }
-}
-```
-
-Budget precedence is:
-
-1. Tool input `output_budget`
-2. First matching `routing.budget_rules` entry
-3. Matching `auto_rules.max_output_tokens`
-4. Role/profile default `max_output_tokens`
-
-Job records include `maxOutputTokens` and `budgetSource`, so Codex can see whether a budget came from `input:output_budget`, `budget_rule:<name>`, `auto_rule:<rule>`, or `role:<role>`.
-
-## Provider diagnostics
-
-Use `doctor` before connecting Codex or after changing keys/base URLs:
+For a temporary macOS/Linux shell session:
 
 ```bash
-external-subagents-mcp doctor
-external-subagents-mcp doctor --json
+export EXTERNAL_SUBAGENTS_PRIMARY_API_KEY="your-api-key"
 ```
 
-The report shows:
-
-- which providers are configured
-- each provider's computed `chat_completions_url`
-- which providers are used by the active profile or auto rules
-- which `api_key_env` variables are set or missing
-- issues without printing secrets
-
-Smoke-test one provider with a minimal chat completion call:
+For a persistent macOS/Linux setup, keep secrets outside the project:
 
 ```bash
-external-subagents-mcp smoke --provider mimo
-external-subagents-mcp smoke --provider glm --json
+mkdir -p ~/.config/external-subagents-mcp
+chmod 700 ~/.config/external-subagents-mcp
+${EDITOR:-nano} ~/.config/external-subagents-mcp/env
 ```
 
-During local development:
+Add the required variables to that file:
 
 ```bash
-npm run build
-node dist/index.js doctor --json
-node dist/index.js smoke --provider mimo --json
+export EXTERNAL_SUBAGENTS_PRIMARY_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_BULK_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_QUALITY_API_KEY="your-api-key"
 ```
 
-## Codex MCP config
+Only add variables for providers you use. Then protect and load the file:
 
-Add the stdio server to Codex:
+```bash
+chmod 600 ~/.config/external-subagents-mcp/env
+echo 'source "$HOME/.config/external-subagents-mcp/env"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Use `~/.bashrc` instead of `~/.zshrc` when Bash is your shell.
+
+For Windows PowerShell, set a user environment variable:
+
+```powershell
+[Environment]::SetEnvironmentVariable("EXTERNAL_SUBAGENTS_PRIMARY_API_KEY", "your-api-key", "User")
+```
+
+Restart the terminal and Codex after changing persistent environment variables.
+
+### 5. Connect it to Codex
+
+Add this to `~/.codex/config.toml` on macOS/Linux or `%USERPROFILE%\.codex\config.toml` on Windows:
 
 ```toml
 [mcp_servers.external_subagents]
 command = "npx"
 args = ["-y", "external-subagents-mcp"]
-env_vars = ["ZAI_API_KEY", "MIMO_API_KEY", "EXTERNAL_SUBAGENTS_CONFIG"]
+env_vars = [
+  "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
+  "EXTERNAL_SUBAGENTS_BULK_API_KEY",
+  "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
+  "EXTERNAL_SUBAGENTS_CONFIG"
+]
 startup_timeout_sec = 20
 tool_timeout_sec = 300
 ```
 
-For local development, point Codex at the built CLI:
+`env_vars` contains variable names only, never secret values. Remove names for providers you do not use, then restart Codex.
 
-```toml
-[mcp_servers.external_subagents]
-command = "node"
-args = ["/absolute/path/to/external-subagents-mcp/dist/index.js"]
-env_vars = ["ZAI_API_KEY", "MIMO_API_KEY", "FAST_API_KEY", "EXTERNAL_SUBAGENTS_CONFIG"]
+### 6. Verify the setup
+
+```bash
+external-subagents-mcp doctor
+external-subagents-mcp smoke --provider primary
 ```
 
-## Tools
+`doctor` shows active routing, missing environment variables, models, and computed chat-completions URLs without printing secrets.
 
-All task tools return a job record. Use `delegate_wait` then `delegate_result` to retrieve the structured report.
+## Profiles: one-line strategy switching
 
-| Tool | Purpose | Key trigger words |
-|------|---------|-------------------|
-| `delegate_summarize_paths` | Read and summarize the specified files | compress, digest, condense, summarize |
-| `delegate_review_diff` | Review a code diff for correctness, security, regressions | review, diff, PR, code review |
-| `delegate_find_relevant_files` | Search, locate, or discover files relevant to a query | search, find, locate, discover |
-| `delegate_analyze_log` | Debug and analyze logs for root causes and failure patterns | debug, analyze, troubleshoot, error, crash |
-| `delegate_provider_status` | Check provider routing, API key setup, and role assignments | check, inspect, diagnose provider |
-| `delegate_provider_smoke` | Smoke-test one provider's connectivity and response format | smoke-test, verify, test provider |
-| `delegate_wait` | Wait for one or more delegate jobs to finish | wait, poll |
-| `delegate_result` | Retrieve the structured report from a completed job | get result, retrieve, fetch |
-| `delegate_status` | List the state of all delegate jobs (queued/running/completed/failed) | job status, progress |
-| `delegate_cancel` | Cancel a queued or running delegate job | cancel, abort |
+Profiles are the main way to control which model handles each role. Use semantic provider names such as `bulk`, `quality`, and `primary`; the providers can point to any compatible API.
 
-### Reasoning chain (phase and depends_on)
+The generated config includes:
 
-Each finding in the structured report may include two optional fields that let Codex audit the reasoning chain before acting on the report:
+- `single_provider`: one provider handles every role. Best for initial setup.
+- `cost_first`: a low-cost provider handles bulk work; a stronger provider handles review.
+- `quality_first`: a low-cost provider summarizes; a stronger provider handles review, logs, and file discovery.
 
-- `phase`: labels the reasoning stage of the finding. Recommended values are `discovery`, `analysis`, `verification`, and `recommendation`.
-- `depends_on`: references earlier findings that this finding's conclusion depends on, using the format `"phase#index"`, e.g. `"discovery#0"`.
-
-Example report with reasoning chain:
+Switch the active strategy by changing one line:
 
 ```json
 {
-  "status": "DONE_WITH_CONCERNS",
-  "summary": "Two security issues found in the authentication module.",
-  "findings": [
-    {
-      "phase": "discovery",
-      "depends_on": [],
-      "severity": "high",
-      "title": "MD5 hashing in password storage",
-      "description": "auth.ts uses MD5 for password hashing, which is cryptographically broken.",
-      "evidence": [{"path": "src/auth.ts", "line_start": 42, "line_end": 45}],
-      "recommendation": "Replace MD5 with bcrypt or argon2.",
-      "confidence": 0.95
-    },
-    {
-      "phase": "analysis",
-      "depends_on": ["discovery#0"],
-      "severity": "medium",
-      "title": "Session token collision risk",
-      "description": "Because MD5 is used, session tokens derived from hashed passwords may collide.",
-      "evidence": [{"path": "src/session.ts", "line_start": 18}],
-      "recommendation": "After replacing MD5, verify session token uniqueness.",
-      "confidence": 0.7
-    }
-  ],
-  "next_actions": ["Verify auth.ts:42-45", "Replace MD5 with bcrypt"],
-  "omitted": []
+  "routing": {
+    "profile": "cost_first"
+  }
 }
 ```
 
-How Codex uses the reasoning chain:
+Each profile maps four roles:
 
-1. Check whether `discovery` findings have high confidence (> 0.5). If the foundation is shaky, later `analysis` findings that depend on it may be unreliable.
-2. Check whether `depends_on` references are valid. A finding that depends on a high-severity discovery means the analysis is built on a known defect — Codex should address the foundation first.
-3. Use `evidence` paths from foundational findings to directly verify the claims before acting on dependent findings.
+```json
+{
+  "profiles": {
+    "cost_first": {
+      "summarizer": "bulk",
+      "reviewer": "quality",
+      "log_analyst": "bulk",
+      "file_finder": "bulk"
+    }
+  }
+}
+```
 
-Both fields are optional. If the external model does not emit them, Codex receives the same flat finding list as before — no behavior change, no parsing error.
+API keys are lazy by provider use. A missing key does not prevent startup; a job fails clearly only when it routes to that provider.
+
+## Configuration reference
+
+Config lookup order:
+
+1. Path in `EXTERNAL_SUBAGENTS_CONFIG`
+2. `.external-subagents-mcp.json`, searched upward from the current project
+3. `~/.config/external-subagents-mcp/config.json`
+
+Important sections:
+
+- `workspace.allow`: files external models may read.
+- `workspace.deny`: files that are always blocked. Deny rules win.
+- `providers`: OpenAI-compatible endpoints, models, and API-key environment variable names.
+- `profiles`: reusable role-to-provider assignments.
+- `routing.profile`: active profile.
+- `routing.auto_rules`: optional first-match provider routing rules.
+- `routing.budget_rules`: optional output-budget increases for large tasks.
+
+`routing.mode = "auto"` can select a provider based on job type, role, or input size. It does not compress or rewrite the prompt.
+
+## Tools
+
+| Tool | Purpose |
+|------|---------|
+| `delegate_summarize_paths` | Read and summarize allowed files |
+| `delegate_review_diff` | Review a supplied code diff |
+| `delegate_find_relevant_files` | Rank relevant allowed files |
+| `delegate_analyze_log` | Analyze logs and failures |
+| `delegate_provider_status` | Inspect routing and API-key status |
+| `delegate_provider_smoke` | Test one provider |
+| `delegate_wait` | Wait for jobs |
+| `delegate_result` | Retrieve one completed report |
+| `delegate_status` | List job states |
+| `delegate_cancel` | Cancel queued or running work |
+
+All task tools return asynchronous job records. External reports may include optional `phase` and `depends_on` fields so Codex can audit the reasoning chain before acting.
 
 ## Safety model
 
-- Read-only: no shell, no patches, no file writes to the repo.
-- Deny rules win over allow rules.
-- Default deny rules block `.env`, dependencies, build output, keys, certs, archives, images, PDFs, and git internals.
+- The MCP tools are read-only: no shell, patches, migrations, formatting, or test execution.
+- Deny rules override allow rules.
+- Default deny rules block `.env`, dependencies, build output, keys, certificates, archives, images, PDFs, and Git internals.
 - Symlinks may not escape the workspace root.
-- Cache stores input hashes and model reports, not raw source text.
-- External model reports are advisory. Codex should verify cited files and lines before editing.
-
-## Development
-
-```bash
-npm install
-npm test
-npm run typecheck
-npm run build
-npm run smoke:stdio
-```
-
-The implementation uses the stable `@modelcontextprotocol/sdk` package. The scoped `@modelcontextprotocol/server` package currently exists on npm only as an alpha package, so this project uses the official stable SDK package for the first release.
+- Cache stores hashes and model reports, not raw source files.
+- API keys are read from environment variables only.
+- External reports are advisory; Codex should verify important evidence before editing.
 
 ## License
 
@@ -388,381 +224,217 @@ MIT
 
 > [English documentation](#external-subagents-mcp)
 
-一个只读 MCP 服务器，让 Codex 将大上下文的审查和摘要工作委托给外部 OpenAI 兼容模型（如 GLM、MiMo、DeepSeek 等）。
+一个只读 MCP 服务器，让 Codex 将大上下文的代码审查、摘要、文件定位和日志分析委托给外部 OpenAI-compatible 模型。
 
-Codex 始终负责编辑文件、运行 shell 命令、应用补丁、审批和最终判断。外部模型仅作为顾问性质的探索者/审查者/摘要者/日志分析师代理。
+Codex 始终负责文件编辑、shell、补丁、审批和最终判断。外部模型只返回顾问性质的报告。
 
-## 为什么用 MCP，而不是 Codex 插件？
+## 快速开始
 
-以独立 MCP 服务器形式分发，用户可以显式配置本地文件访问权限、API 密钥和模型路由。这更适合读取本地项目文件并调用第三方模型 API 的工作流。
+### 1. 安装
 
-## 安装
+需要 Node.js 20 或更高版本。
 
 ```bash
 npm install -g external-subagents-mcp
 ```
 
-本地开发：
+### 2. 自动创建项目配置
+
+进入允许外部模型读取的项目根目录，运行：
 
 ```bash
-npm install
-npm run build
+external-subagents-mcp init
 ```
 
-## 配置
+工具会自动创建 `.external-subagents-mcp.json`，其中包含安全的 workspace 默认值、单模型 profile 和可选的多模型 profiles。已有配置不会被覆盖。
 
-在项目根目录创建 `.external-subagents-mcp.json`，或设置 `EXTERNAL_SUBAGENTS_CONFIG` 为绝对配置路径。
+### 3. 配置你的 Provider
 
-```json
-{
-  "workspace": {
-    "allow": ["src/**", "tests/**", "docs/**", "package.json", "README.md"],
-    "deny": ["**/.env*", "**/node_modules/**", "**/dist/**", "**/*.pem"],
-    "max_file_bytes": 262144,
-    "max_total_bytes": 2097152
-  },
-  "cache": {
-    "dir": ".external-subagents/cache",
-    "ttl_hours": 168,
-    "max_bytes": 524288000
-  },
-  "concurrency": {
-    "global": 3,
-    "per_provider": 2
-  },
-  "providers": {
-    "glm": {
-      "base_url": "https://api.z.ai/api/paas/v4",
-      "api_key_env": "ZAI_API_KEY",
-      "model": "glm-5.1",
-      "wire_api": "chat_completions"
-    },
-    "mimo": {
-      "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
-      "api_key_env": "MIMO_API_KEY",
-      "model": "mimo-v2.5-pro",
-      "wire_api": "chat_completions"
-    },
-    "fast": {
-      "base_url": "https://api.example.com/v1",
-      "api_key_env": "FAST_API_KEY",
-      "model": "fast-code-model",
-      "wire_api": "chat_completions"
-    }
-  },
-  "routing": {
-    "profile": "code_quality_first",
-    "mode": "auto",
-    "auto_rules": [
-      { "kind": "find_relevant_files", "provider": "fast", "max_output_tokens": 1200 },
-      { "role": "log_analyst", "min_input_bytes": 100000, "provider": "glm", "max_output_tokens": 3000 }
-    ],
-    "budget_rules": [
-      { "name": "long_logs", "role": "log_analyst", "min_input_bytes": 20000, "max_output_tokens": 3500 },
-      { "name": "huge_logs", "role": "log_analyst", "min_input_bytes": 80000, "max_output_tokens": 5000 },
-      { "name": "large_reviews", "kind": "review_diff", "min_input_bytes": 50000, "max_output_tokens": 5000 },
-      { "name": "large_summaries", "kind": "summarize_paths", "min_input_bytes": 50000, "max_output_tokens": 4500 }
-    ]
-  },
-  "profiles": {
-    "cost_first": {
-      "summarizer": "mimo",
-      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
-      "log_analyst": "mimo",
-      "file_finder": "mimo"
-    },
-    "code_quality_first": {
-      "summarizer": { "provider": "mimo", "max_output_tokens": 2000 },
-      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
-      "log_analyst": { "provider": "glm", "max_output_tokens": 2500 },
-      "file_finder": { "provider": "glm", "max_output_tokens": 1800 }
-    },
-    "balanced_three_model": {
-      "summarizer": "mimo",
-      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
-      "log_analyst": { "provider": "glm", "max_output_tokens": 2500 },
-      "file_finder": { "provider": "fast", "max_output_tokens": 1200 }
-    }
-  }
-}
-```
-
-API 密钥必须存储在环境变量中：
-
-```bash
-export ZAI_API_KEY=...
-export MIMO_API_KEY=...
-```
-
-### OpenAI 兼容 provider URL
-
-每个 provider 默认使用标准 chat-completions 线格式：
-
-- `base_url` 是 provider 或套餐的基础 URL。
-- `chat_completions_path` 可选，默认为 `chat/completions`。
-- 最终请求 URL 通常为 `<base_url>/chat/completions`。
-- 如果 `base_url` 已以 `/chat/completions` 结尾，服务器不会重复拼接。
-- 对于非标准端点，显式设置 `chat_completions_path`。
-
-示例：
+打开 `.external-subagents-mcp.json`，修改要使用的 provider：
 
 ```json
 {
   "providers": {
-    "deepseek": {
-      "base_url": "https://api.deepseek.com",
-      "api_key_env": "DEEPSEEK_API_KEY",
-      "model": "deepseek-chat"
-    },
-    "mimo": {
-      "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
-      "api_key_env": "MIMO_API_KEY",
-      "model": "mimo-v2.5-pro"
-    },
-    "minimax": {
-      "base_url": "https://api.minimax.io/v1",
-      "chat_completions_path": "text/chatcompletion_v2",
-      "api_key_env": "MINIMAX_API_KEY",
-      "model": "MiniMax-M3"
-    },
-    "qwen": {
-      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      "api_key_env": "DASHSCOPE_API_KEY",
-      "model": "qwen-plus"
-    },
-    "hunyuan": {
-      "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
-      "api_key_env": "HUNYUAN_API_KEY",
-      "model": "hunyuan-turbos-latest"
+    "primary": {
+      "base_url": "https://your-provider.example/v1",
+      "api_key_env": "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
+      "model": "your-model-name"
     }
   }
 }
 ```
 
-这些是起点配置，不是厂商专用适配器。请始终使用你自己 provider 控制台或套餐页面中的 Base URL、模型名称和 API 密钥环境变量，然后运行 `doctor --json` 确认计算出的 `chat_completions_url`，运行 `smoke --provider <name>` 验证实际调用。
+请从 provider 自己的官网文档或控制台复制 `base_url` 和 `model`。
 
-MiMo Token Plan 需将 `base_url` 设为订阅页面上的 Base URL。当前区域示例：
+- `base_url`：provider API 基础地址。服务器通常会自动拼接 `chat/completions`。
+- `model`：provider 的模型标识符。
+- `api_key_env`：保存 API key 的环境变量名称，不是 API key 本身。
+- `chat_completions_path`：可选。仅当 provider 使用非标准路径时填写。
 
-- 中国：`https://token-plan-cn.xiaomimimo.com/v1`
-- 新加坡：`https://token-plan-sgp.xiaomimimo.com/v1`
-- 欧洲：`https://token-plan-ams.xiaomimimo.com/v1`
+不要把 API key 写进 `.external-subagents-mcp.json`。
 
-如果仅测试 MiMo，将所有角色指向 `mimo`，只需要 `MIMO_API_KEY`。`model` 值应与你的 token plan 提供的模型 UID 匹配。
+### 4. 设置 API Key 环境变量
 
-Z.AI 配置说明：
-
-- 通用 OpenAI 兼容端点：`https://api.z.ai/api/paas/v4`
-- GLM Coding Plan 端点：`https://api.z.ai/api/coding/paas/v4`
-- Z.AI 文档当前显示 `glm-5.1` 的 chat completions 示例。
-- 请优先使用 Z.AI 控制台或套餐页面的 Base URL，然后用 `smoke` 验证。
-
-官方参考：
-
-- Z.AI API 简介：https://docs.z.ai/api-reference/introduction
-- MiMo Token Plan 订阅说明：https://platform.xiaomimimo.com/docs/en-US/tokenplan/subscription
-- DeepSeek API 快速入门：https://api-docs.deepseek.com/
-- MiniMax 文本生成端点：https://platform.minimax.io/docs/api-reference/text-post
-- Qwen/DashScope OpenAI 兼容聊天：https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions
-- 腾讯混元 OpenAI 兼容示例：https://cloud.tencent.com/document/product/1729/111007
-
-### Profile 与路由
-
-当你有两个或更多 provider 时，使用 `profiles` 实现一键策略切换：
-
-- `cost_first`：MiMo 处理批量摘要/日志/文件发现；GLM 处理代码审查。
-- `code_quality_first`：GLM 处理代码审查、日志分析和文件发现；MiMo 处理批量摘要。
-- `balanced_three_model`：第三个快速/低成本模型处理文件发现；GLM 处理代码判断；MiMo 处理摘要。
-
-设置活跃策略：
+配置中的 `api_key_env` 用于指定环境变量名称：
 
 ```json
-{
-  "routing": { "profile": "code_quality_first" }
-}
+"api_key_env": "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY"
 ```
 
-`routing.mode = "auto"` 在活跃 profile 上叠加首匹配 provider 选择规则。自动路由仅选择 provider 和可选输出预算。它不会摘要、压缩、重写或在发送给所选 provider 之前转换 prompt。
+同名环境变量中才存放真正的 API key。
 
-```json
-{
-  "routing": {
-    "profile": "code_quality_first",
-    "mode": "auto",
-    "auto_rules": [
-      { "kind": "find_relevant_files", "provider": "fast" },
-      { "role": "log_analyst", "min_input_bytes": 100000, "provider": "glm", "max_output_tokens": 3000 }
-    ]
-  }
-}
-```
-
-API 密钥按 provider 使用情况延迟生效。缺少密钥不会阻止服务器启动；只有在路由到 `api_key_env` 未设置的 provider 时任务才会明确失败。缓存结果在没有 provider 密钥的情况下仍可读取。
-
-### 动态输出预算
-
-使用 `routing.budget_rules` 在不更换所选 provider 和不压缩/重写输入的情况下，为大型或复杂任务提升 `max_output_tokens`。
-
-```json
-{
-  "routing": {
-    "budget_rules": [
-      { "name": "long_logs", "role": "log_analyst", "min_input_bytes": 20000, "max_output_tokens": 3500 },
-      { "name": "huge_logs", "role": "log_analyst", "min_input_bytes": 80000, "max_output_tokens": 5000 },
-      { "name": "large_reviews", "kind": "review_diff", "min_input_bytes": 50000, "max_output_tokens": 5000 },
-      { "name": "large_summaries", "kind": "summarize_paths", "min_input_bytes": 50000, "max_output_tokens": 4500 }
-    ]
-  }
-}
-```
-
-预算优先级：
-
-1. 工具输入 `output_budget`
-2. 第一个匹配的 `routing.budget_rules` 条目
-3. 匹配的 `auto_rules.max_output_tokens`
-4. 角色/profile 默认 `max_output_tokens`
-
-Job 记录包含 `maxOutputTokens` 和 `budgetSource`，Codex 可以看到预算来自 `input:output_budget`、`budget_rule:<name>`、`auto_rule:<rule>` 还是 `role:<role>`。
-
-## Provider 诊断
-
-在连接 Codex 或更改密钥/base URL 后，使用 `doctor`：
+macOS/Linux 当前终端临时使用：
 
 ```bash
-external-subagents-mcp doctor
-external-subagents-mcp doctor --json
+export EXTERNAL_SUBAGENTS_PRIMARY_API_KEY="your-api-key"
 ```
 
-报告显示：
-
-- 配置了哪些 provider
-- 每个 provider 计算出的 `chat_completions_url`
-- 哪些 provider 被活跃 profile 或 auto rules 使用
-- 哪些 `api_key_env` 变量已设置或缺失
-- 问题列表（不打印密钥）
-
-用最小 chat completion 调用 smoke-test 一个 provider：
+macOS/Linux 持久设置时，建议将密钥文件放在项目之外：
 
 ```bash
-external-subagents-mcp smoke --provider mimo
-external-subagents-mcp smoke --provider glm --json
+mkdir -p ~/.config/external-subagents-mcp
+chmod 700 ~/.config/external-subagents-mcp
+${EDITOR:-nano} ~/.config/external-subagents-mcp/env
 ```
 
-本地开发：
+在打开的文件中填写需要使用的变量：
 
 ```bash
-npm run build
-node dist/index.js doctor --json
-node dist/index.js smoke --provider mimo --json
+export EXTERNAL_SUBAGENTS_PRIMARY_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_BULK_API_KEY="your-api-key"
+export EXTERNAL_SUBAGENTS_QUALITY_API_KEY="your-api-key"
 ```
 
-## Codex MCP 配置
+只需填写实际使用的 provider。随后保护并加载这个文件：
 
-将 stdio 服务器添加到 Codex：
+```bash
+chmod 600 ~/.config/external-subagents-mcp/env
+echo 'source "$HOME/.config/external-subagents-mcp/env"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+使用 Bash 时，将 `~/.zshrc` 替换为 `~/.bashrc`。
+
+Windows PowerShell 可设置用户级环境变量：
+
+```powershell
+[Environment]::SetEnvironmentVariable("EXTERNAL_SUBAGENTS_PRIMARY_API_KEY", "your-api-key", "User")
+```
+
+修改持久环境变量后，请重启终端和 Codex。
+
+### 5. 接入 Codex
+
+在 macOS/Linux 的 `~/.codex/config.toml`，或 Windows 的 `%USERPROFILE%\.codex\config.toml` 中加入：
 
 ```toml
 [mcp_servers.external_subagents]
 command = "npx"
 args = ["-y", "external-subagents-mcp"]
-env_vars = ["ZAI_API_KEY", "MIMO_API_KEY", "EXTERNAL_SUBAGENTS_CONFIG"]
+env_vars = [
+  "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
+  "EXTERNAL_SUBAGENTS_BULK_API_KEY",
+  "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
+  "EXTERNAL_SUBAGENTS_CONFIG"
+]
 startup_timeout_sec = 20
 tool_timeout_sec = 300
 ```
 
-本地开发时，将 Codex 指向已构建的 CLI：
+`env_vars` 中只填写变量名，绝不能填写密钥值。删除没有使用的 provider 变量名，然后重启 Codex。
 
-```toml
-[mcp_servers.external_subagents]
-command = "node"
-args = ["/absolute/path/to/external-subagents-mcp/dist/index.js"]
-env_vars = ["ZAI_API_KEY", "MIMO_API_KEY", "FAST_API_KEY", "EXTERNAL_SUBAGENTS_CONFIG"]
+### 6. 验证配置
+
+```bash
+external-subagents-mcp doctor
+external-subagents-mcp smoke --provider primary
 ```
 
-## 工具
+`doctor` 会显示当前路由、缺失的环境变量、模型和最终 chat-completions URL，但不会打印密钥。
 
-所有任务工具返回一个 job 记录。使用 `delegate_wait` 然后 `delegate_result` 获取结构化报告。
+## Profiles：一行切换模型策略
 
-| 工具 | 用途 | 关键触发词 |
-|------|------|-----------|
-| `delegate_summarize_paths` | 读取并摘要指定文件 | compress、digest、condense、summarize |
-| `delegate_review_diff` | 审查代码 diff 的正确性、安全性、回归 | review、diff、PR、code review |
-| `delegate_find_relevant_files` | 搜索、定位或发现与查询相关的文件 | search、find、locate、discover |
-| `delegate_analyze_log` | 调试和分析日志的根本原因与故障模式 | debug、analyze、troubleshoot、error、crash |
-| `delegate_provider_status` | 检查 provider 路由、API 密钥配置和角色分配 | check、inspect、diagnose provider |
-| `delegate_provider_smoke` | Smoke-test 一个 provider 的连通性和响应格式 | smoke-test、verify、test provider |
-| `delegate_wait` | 等待一个或多个委托任务完成 | wait、poll |
-| `delegate_result` | 从已完成任务获取结构化报告 | get result、retrieve、fetch |
-| `delegate_status` | 列出所有委托任务的状态（queued/running/completed/failed） | job status、progress |
-| `delegate_cancel` | 取消排队或运行中的委托任务 | cancel、abort |
+Profiles 是控制不同角色使用哪个模型的主要方式。建议使用 `bulk`、`quality`、`primary` 这类语义化 provider 名称；它们可以指向任意兼容 API。
 
-### 推理链（phase 和 depends_on）
+自动生成的配置包含：
 
-结构化报告中每个 finding 可以包含两个可选字段，让 Codex 在行动之前审查推理链的内部一致性：
+- `single_provider`：一个 provider 完成所有角色，最适合首次配置。
+- `cost_first`：低成本 provider 承担大批量工作，更强的 provider 负责代码审查。
+- `quality_first`：低成本 provider 负责摘要，更强的 provider 负责审查、日志分析和文件定位。
 
-- `phase`：标注该 finding 的推理阶段。建议值为 `discovery`（发现）、`analysis`（分析）、`verification`（验证）、`recommendation`（建议）。
-- `depends_on`：引用该 finding 结论所依赖的前置 finding，使用 `"phase#index"` 格式，如 `"discovery#0"`。
-
-含推理链的报告示例：
+只需修改一行即可切换活跃策略：
 
 ```json
 {
-  "status": "DONE_WITH_CONCERNS",
-  "summary": "认证模块中发现两个安全问题。",
-  "findings": [
-    {
-      "phase": "discovery",
-      "depends_on": [],
-      "severity": "high",
-      "title": "密码存储使用 MD5 哈希",
-      "description": "auth.ts 使用 MD5 进行密码哈希，这在密码学上已被破解。",
-      "evidence": [{"path": "src/auth.ts", "line_start": 42, "line_end": 45}],
-      "recommendation": "将 MD5 替换为 bcrypt 或 argon2。",
-      "confidence": 0.95
-    },
-    {
-      "phase": "analysis",
-      "depends_on": ["discovery#0"],
-      "severity": "medium",
-      "title": "会话令牌碰撞风险",
-      "description": "由于使用了 MD5，从哈希密码派生的会话令牌可能发生碰撞。",
-      "evidence": [{"path": "src/session.ts", "line_start": 18}],
-      "recommendation": "替换 MD5 后，验证会话令牌的唯一性。",
-      "confidence": 0.7
-    }
-  ],
-  "next_actions": ["验证 auth.ts:42-45", "将 MD5 替换为 bcrypt"],
-  "omitted": []
+  "routing": {
+    "profile": "cost_first"
+  }
 }
 ```
 
-Codex 如何使用推理链：
+每个 profile 分配四种角色：
 
-1. 检查 `discovery` 阶段的 findings 的置信度是否普遍较高（> 0.5）。如果基础 findings 置信度低，后续依赖它们的 `analysis` findings 可能不可靠。
-2. 检查 `depends_on` 引用是否有效。一个 finding 依赖于高严重度的 discovery，意味着分析建立在已知缺陷之上——Codex 应优先处理基础问题。
-3. 使用基础 findings 的 `evidence` 路径直接验证声明，再根据依赖 findings 的建议采取行动。
+```json
+{
+  "profiles": {
+    "cost_first": {
+      "summarizer": "bulk",
+      "reviewer": "quality",
+      "log_analyst": "bulk",
+      "file_finder": "bulk"
+    }
+  }
+}
+```
 
-两个字段均为可选。如果外部模型不输出它们，Codex 收到与之前完全相同的扁平 findings 列表——没有行为变化，没有解析错误。
+API key 按 provider 实际使用情况延迟生效。缺少未使用 provider 的 key 不会阻止启动；只有任务真正路由到它时才会明确失败。
+
+## 配置参考
+
+配置查找顺序：
+
+1. `EXTERNAL_SUBAGENTS_CONFIG` 指定的路径
+2. 从当前项目向上查找 `.external-subagents-mcp.json`
+3. `~/.config/external-subagents-mcp/config.json`
+
+重要配置段：
+
+- `workspace.allow`：允许外部模型读取的文件。
+- `workspace.deny`：始终禁止读取的文件；deny 优先。
+- `providers`：OpenAI-compatible endpoint、模型和 API key 环境变量名称。
+- `profiles`：可复用的角色与 provider 分配方案。
+- `routing.profile`：当前活跃 profile。
+- `routing.auto_rules`：可选的首匹配自动路由规则。
+- `routing.budget_rules`：可选的大任务输出预算提升规则。
+
+`routing.mode = "auto"` 可以根据任务类型、角色或输入大小选择 provider，但不会压缩或重写 prompt。
+
+## 工具
+
+| 工具 | 用途 |
+|------|------|
+| `delegate_summarize_paths` | 读取并摘要允许访问的文件 |
+| `delegate_review_diff` | 审查传入的代码 diff |
+| `delegate_find_relevant_files` | 对相关文件进行排序 |
+| `delegate_analyze_log` | 分析日志和失败原因 |
+| `delegate_provider_status` | 检查路由和 API key 状态 |
+| `delegate_provider_smoke` | 测试单个 provider |
+| `delegate_wait` | 等待任务 |
+| `delegate_result` | 获取已完成报告 |
+| `delegate_status` | 列出任务状态 |
+| `delegate_cancel` | 取消排队或运行中的任务 |
+
+所有任务工具都会返回异步 job 记录。外部报告可以包含可选的 `phase` 和 `depends_on` 字段，供 Codex 在行动前审查推理链。
 
 ## 安全模型
 
-- 只读：无 shell、无补丁、不对仓库写入文件。
+- MCP 工具保持只读：不运行 shell、不应用补丁、不执行迁移、格式化或测试。
 - deny 规则优先于 allow 规则。
-- 默认 deny 规则阻止 `.env`、依赖、构建产物、密钥、证书、压缩包、图片、PDF 和 git 内部文件。
+- 默认 deny 规则阻止 `.env`、依赖目录、构建产物、密钥、证书、压缩包、图片、PDF 和 Git 内部文件。
 - 符号链接不可逃逸 workspace 根目录。
-- 缓存存储输入哈希和模型报告，不存储原始源文本。
-- 外部模型报告仅供参考。Codex 在编辑前应验证引用的文件和行号。
-
-## 开发
-
-```bash
-npm install
-npm test
-npm run typecheck
-npm run build
-npm run smoke:stdio
-```
-
-实现使用稳定的 `@modelcontextprotocol/sdk` 包。scoped `@modelcontextprotocol/server` 包目前在 npm 上仅作为 alpha 包存在，因此本项目使用官方稳定 SDK 包作为首个发布版本。
+- 缓存仅保存哈希和模型报告，不保存原始源文件。
+- API key 只从环境变量读取。
+- 外部模型报告仅供参考；Codex 编辑前应验证重要证据。
 
 ## 许可证
 

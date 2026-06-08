@@ -15,70 +15,52 @@
     "per_provider": 2
   },
   "providers": {
-    "glm": {
-      "base_url": "https://api.z.ai/api/paas/v4",
-      "api_key_env": "ZAI_API_KEY",
-      "model": "glm-5.1",
-      "wire_api": "chat_completions"
-    },
-    "mimo": {
-      "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
-      "api_key_env": "MIMO_API_KEY",
-      "model": "mimo-v2.5-pro",
-      "wire_api": "chat_completions"
-    },
-    "deepseek": {
-      "base_url": "https://api.deepseek.com",
-      "api_key_env": "DEEPSEEK_API_KEY",
-      "model": "deepseek-chat",
-      "wire_api": "chat_completions"
-    },
-    "minimax": {
-      "base_url": "https://api.minimax.io/v1",
-      "chat_completions_path": "text/chatcompletion_v2",
-      "api_key_env": "MINIMAX_API_KEY",
-      "model": "MiniMax-M3",
-      "wire_api": "chat_completions"
-    },
-    "fast": {
+    "primary": {
       "base_url": "https://api.example.com/v1",
-      "api_key_env": "FAST_API_KEY",
-      "model": "fast-code-model",
+      "api_key_env": "EXTERNAL_SUBAGENTS_PRIMARY_API_KEY",
+      "model": "provider-model-name",
+      "wire_api": "chat_completions"
+    },
+    "bulk": {
+      "base_url": "https://api.example.com/v1",
+      "api_key_env": "EXTERNAL_SUBAGENTS_BULK_API_KEY",
+      "model": "provider-model-name",
+      "wire_api": "chat_completions"
+    },
+    "quality": {
+      "base_url": "https://api.example.com/v1",
+      "api_key_env": "EXTERNAL_SUBAGENTS_QUALITY_API_KEY",
+      "model": "provider-model-name",
       "wire_api": "chat_completions"
     }
   },
   "routing": {
-    "profile": "code_quality_first",
-    "mode": "auto",
-    "auto_rules": [
-      { "kind": "find_relevant_files", "provider": "fast", "max_output_tokens": 1200 },
-      { "role": "log_analyst", "min_input_bytes": 100000, "provider": "glm", "max_output_tokens": 3000 }
-    ],
+    "profile": "single_provider",
+    "mode": "profile",
     "budget_rules": [
       { "name": "long_logs", "role": "log_analyst", "min_input_bytes": 20000, "max_output_tokens": 3500 },
-      { "name": "huge_logs", "role": "log_analyst", "min_input_bytes": 80000, "max_output_tokens": 5000 },
       { "name": "large_reviews", "kind": "review_diff", "min_input_bytes": 50000, "max_output_tokens": 5000 },
       { "name": "large_summaries", "kind": "summarize_paths", "min_input_bytes": 50000, "max_output_tokens": 4500 }
     ]
   },
   "profiles": {
+    "single_provider": {
+      "summarizer": "primary",
+      "reviewer": "primary",
+      "log_analyst": "primary",
+      "file_finder": "primary"
+    },
     "cost_first": {
-      "summarizer": "mimo",
-      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
-      "log_analyst": "mimo",
-      "file_finder": "mimo"
+      "summarizer": "bulk",
+      "reviewer": "quality",
+      "log_analyst": "bulk",
+      "file_finder": "bulk"
     },
-    "code_quality_first": {
-      "summarizer": { "provider": "mimo", "max_output_tokens": 2000 },
-      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
-      "log_analyst": { "provider": "glm", "max_output_tokens": 2500 },
-      "file_finder": { "provider": "glm", "max_output_tokens": 1800 }
-    },
-    "balanced_three_model": {
-      "summarizer": "mimo",
-      "reviewer": { "provider": "glm", "max_output_tokens": 3000 },
-      "log_analyst": { "provider": "glm", "max_output_tokens": 2500 },
-      "file_finder": { "provider": "fast", "max_output_tokens": 1200 }
+    "quality_first": {
+      "summarizer": "bulk",
+      "reviewer": "quality",
+      "log_analyst": "quality",
+      "file_finder": "quality"
     }
   }
 }

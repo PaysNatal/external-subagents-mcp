@@ -1,3 +1,6 @@
+import { constants } from "node:fs";
+import { copyFile } from "node:fs/promises";
+import path from "node:path";
 import { buildProviderStatusReport, smokeProvider } from "./diagnostics.js";
 import { loadConfig } from "./config.js";
 
@@ -11,7 +14,7 @@ export interface CliOptions {
 
 export function isCliCommand(args: string[]): boolean {
   const command = args[0];
-  return command === "doctor" || command === "smoke" || command === "help" || command === "--help" || command === "-h";
+  return command === "init" || command === "doctor" || command === "smoke" || command === "help" || command === "--help" || command === "-h";
 }
 
 export async function runCli(args: string[], options: CliOptions = {}): Promise<number> {
@@ -23,6 +26,26 @@ export async function runCli(args: string[], options: CliOptions = {}): Promise<
   const json = args.includes("--json");
 
   try {
+    if (command === "init") {
+      const target = path.join(cwd, ".external-subagents-mcp.json");
+      try {
+        await copyFile(new URL("../.external-subagents-mcp.example.json", import.meta.url), target, constants.COPYFILE_EXCL);
+      } catch (error) {
+        if (isNodeError(error) && error.code === "EEXIST") {
+          stderr(`Config already exists: ${target}\n`);
+          return 1;
+        }
+        throw error;
+      }
+      stdout(
+        [
+          `Created ${target}`,
+          "Next: edit provider base_url/model values, set the api_key_env variables, then run external-subagents-mcp doctor."
+        ].join("\n") + "\n"
+      );
+      return 0;
+    }
+
     if (command === "doctor") {
       const report = buildProviderStatusReport(loadConfig(cwd, env), env);
       stdout(json ? `${JSON.stringify(report, null, 2)}\n` : formatProviderStatusReport(report));
@@ -51,6 +74,10 @@ export async function runCli(args: string[], options: CliOptions = {}): Promise<
 function readOption(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
   return index === -1 ? undefined : args[index + 1];
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 function formatProviderStatusReport(report: ReturnType<typeof buildProviderStatusReport>): string {
@@ -82,6 +109,7 @@ function formatProviderSmokeReport(report: Awaited<ReturnType<typeof smokeProvid
 function usage(): string {
   return [
     "Usage:",
+    "  external-subagents-mcp init",
     "  external-subagents-mcp doctor [--json]",
     "  external-subagents-mcp smoke --provider <name> [--json]",
     "  external-subagents-mcp",
