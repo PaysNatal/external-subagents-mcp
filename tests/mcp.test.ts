@@ -19,6 +19,8 @@ describe("MCP server", () => {
         "delegate_analyze_log",
         "delegate_cancel",
         "delegate_find_relevant_files",
+        "delegate_provider_smoke",
+        "delegate_provider_status",
         "delegate_result",
         "delegate_review_diff",
         "delegate_status",

@@ -1,6 +1,7 @@
 import { ExternalSubagentsApp } from "./app.js";
 import { DiskCache } from "./cache.js";
 import { type NormalizedConfig, loadConfig } from "./config.js";
+import { buildProviderStatusReport, smokeProvider } from "./diagnostics.js";
 import { JobManager } from "./jobs.js";
 import { OpenAICompatibleProvider } from "./provider.js";
 import { createWorkspace } from "./workspace.js";
@@ -42,7 +43,11 @@ export function createAppFromConfig(config: NormalizedConfig, env: NodeJS.Proces
       routing: config.routing,
       globalConcurrency: config.concurrency.global,
       perProviderConcurrency: config.concurrency.perProvider
-    })
+    }),
+    diagnostics: {
+      status: () => buildProviderStatusReport(config, env),
+      smoke: input => smokeProvider(config, env, input)
+    }
   });
 }
 

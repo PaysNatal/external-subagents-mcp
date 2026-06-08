@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import { REPORT_CONTRACT } from "./report.js";
 import type { DiskCache } from "./cache.js";
 import type { NormalizedConfig } from "./config.js";
+import type { ProviderSmokeInput, ProviderSmokeReport, ProviderStatusReport } from "./diagnostics.js";
 import type { JobManager } from "./jobs.js";
 import type { JobKind, JobRecord } from "./types.js";
 import type { WorkspaceReader } from "./workspace.js";
@@ -13,6 +14,10 @@ export interface ExternalSubagentsAppOptions {
   workspace: WorkspaceReader;
   cache: DiskCache;
   jobs: JobManager;
+  diagnostics?: {
+    status: () => ProviderStatusReport;
+    smoke: (input: ProviderSmokeInput) => Promise<ProviderSmokeReport>;
+  };
 }
 
 export interface DelegateSummarizePathsInput {
@@ -186,6 +191,20 @@ export class ExternalSubagentsApp {
 
   cancel(jobId: string): JobRecord {
     return this.options.jobs.cancel(jobId);
+  }
+
+  providerStatus(): ProviderStatusReport {
+    if (!this.options.diagnostics) {
+      throw new Error("Provider diagnostics are unavailable.");
+    }
+    return this.options.diagnostics.status();
+  }
+
+  providerSmoke(input: ProviderSmokeInput): Promise<ProviderSmokeReport> {
+    if (!this.options.diagnostics) {
+      throw new Error("Provider diagnostics are unavailable.");
+    }
+    return this.options.diagnostics.smoke(input);
   }
 
   private async startWithCache(input: {

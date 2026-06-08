@@ -108,6 +108,18 @@ For MiMo Token Plan, set `base_url` to the Base URL shown on the subscription pa
 
 If you are testing MiMo only, point every role at `mimo` and only `MIMO_API_KEY` is required. The `model` value should match the model UID shown for your token plan when MiMo provides a plan-specific UID.
 
+Z.AI setup notes:
+
+- General OpenAI-compatible endpoint: `https://api.z.ai/api/paas/v4`
+- GLM Coding Plan endpoint: `https://api.z.ai/api/coding/paas/v4`
+- The Z.AI docs currently show `glm-5.1` with chat completions examples.
+- Prefer the Base URL shown in your Z.AI console or plan page, then verify with `smoke`.
+
+Official references:
+
+- Z.AI API introduction: https://docs.z.ai/api-reference/introduction
+- MiMo Token Plan subscription instructions: https://platform.xiaomimimo.com/docs/en-US/tokenplan/subscription
+
 ### Profiles and routing
 
 Use `profiles` when you have two or more providers and want a one-line strategy switch:
@@ -141,6 +153,37 @@ Set the active strategy with:
 
 API keys are lazy by provider use. Missing keys do not prevent server startup; a job fails clearly only if it routes to a provider whose `api_key_env` is not set. Cached results can still be read without the provider key.
 
+## Provider diagnostics
+
+Use `doctor` before connecting Codex or after changing keys/base URLs:
+
+```bash
+external-subagents-mcp doctor
+external-subagents-mcp doctor --json
+```
+
+The report shows:
+
+- which providers are configured
+- which providers are used by the active profile or auto rules
+- which `api_key_env` variables are set or missing
+- issues without printing secrets
+
+Smoke-test one provider with a minimal chat completion call:
+
+```bash
+external-subagents-mcp smoke --provider mimo
+external-subagents-mcp smoke --provider glm --json
+```
+
+During local development:
+
+```bash
+npm run build
+node dist/index.js doctor --json
+node dist/index.js smoke --provider mimo --json
+```
+
 ## Codex MCP config
 
 Add the stdio server to Codex:
@@ -169,6 +212,8 @@ env_vars = ["ZAI_API_KEY", "MIMO_API_KEY", "EXTERNAL_SUBAGENTS_CONFIG"]
 - `delegate_review_diff`: review supplied diff text and optional file context.
 - `delegate_find_relevant_files`: rank allowed files for a query.
 - `delegate_analyze_log`: analyze supplied log text or an allowed log path.
+- `delegate_provider_status`: inspect active routing, provider usage, and key status without exposing secrets.
+- `delegate_provider_smoke`: smoke-test one provider with a minimal chat completion call.
 - `delegate_wait`: wait for async jobs.
 - `delegate_result`: fetch one job result.
 - `delegate_status`: list job statuses.

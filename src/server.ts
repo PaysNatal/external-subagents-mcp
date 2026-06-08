@@ -9,6 +9,8 @@ Use these tools for large-context review, summarization, triage, log analysis, a
 
 The external model output is advisory. Codex must verify cited files and line numbers before changing code.
 
+Use provider status and smoke-test tools to diagnose API keys, active routing, base URLs, and model IDs before delegating expensive work.
+
 When following Superpowers-style workflows such as dispatching-parallel-agents or subagent-driven-development, these tools can serve as external explorer, reviewer, file_finder, summarizer, and log_analyst delegates. They must not serve as implementers.`;
 
 const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_write");
@@ -17,6 +19,33 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   const server = new McpServer(
     { name: "external-subagents-mcp", version: "0.1.0" },
     { instructions: SERVER_INSTRUCTIONS }
+  );
+
+  server.registerTool(
+    "delegate_provider_status",
+    {
+      title: "Inspect provider routing and API key status",
+      description:
+        "Return a diagnostic report for configured providers, active roles, auto routing rules, and missing API key environment variables. Does not expose secrets.",
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      inputSchema: {}
+    },
+    async () => toolResult(app.providerStatus())
+  );
+
+  server.registerTool(
+    "delegate_provider_smoke",
+    {
+      title: "Smoke-test one provider",
+      description:
+        "Send a minimal chat completion request to one configured provider to verify base_url, API key, model ID, and JSON report compatibility.",
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+      inputSchema: {
+        provider: z.string().min(1),
+        max_output_tokens: z.number().int().positive().optional()
+      }
+    },
+    async ({ provider, max_output_tokens }) => toolResult(await app.providerSmoke({ provider, maxOutputTokens: max_output_tokens }))
   );
 
   server.registerTool(
@@ -155,7 +184,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   return server;
 }
 
-function toolResult<T extends JobRecord | JobRecord[] | Record<string, unknown>>(structuredContent: T) {
+function toolResult<T extends object>(structuredContent: T) {
   return {
     content: [
       {
