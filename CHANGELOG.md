@@ -12,6 +12,36 @@ The format follows a simplified [Keep a Changelog](https://keepachangelog.com/) 
 
 ---
 
+## v0.1.2 — 2026-06-09
+
+### security: selective merge of external security review findings
+
+An external engineer performed a comprehensive security review covering 34 issues across 13 source files. Each proposed change was individually verified and selectively merged based on robustness, usability, and correctness.
+
+**Accepted hardening:**
+
+- **Prompt injection defense** (app.ts): Added anti-injection instruction in `baseInstructions()` and `UNTRUSTED FILE` content markers in `renderDocuments()` to prevent embedded instructions in file content from hijacking model behavior.
+- **Workspace walk safety** (workspace.ts): Added depth limit (`MAX_DEPTH = 50`), symlink cycle detection via `visited` Set, EACCES/EPERM graceful handling, dangling symlink detection in `assertInsideWorkspace()`, and selective symlink skipping (external symlinks blocked, internal symlinks preserved).
+- **Input length constraints** (server.ts): Added `.max()` constraints on all tool input parameters (focus: 5000, query: 2000, diff_text: 500000, log_text: 1000000, paths/globs: bounded). Changed `delegate_provider_status` inputSchema from bare `{}` to `z.object({})`.
+- **Cache file security** (cache.ts): Restrictive file permissions (`0o700` dirs, `0o600` files), write serialization lock to prevent concurrent writes, enhanced error handling distinguishing ENOENT from real errors, and robust `sortForStableStringify` handling null/Date/Map/Set/Buffer.
+- **Graceful shutdown** (index.ts): SIGTERM/SIGINT handlers with `shuttingDown` guard, startup error desensitization (details only when `DEBUG=external-subagents-mcp`).
+- **Memory cleanup** (jobs.ts): Prompt field cleared (`job.prompt = ""`) after job completion in both success and error paths.
+- **Config validation** (config.ts): Added `.max()` limits on max_file_bytes (10MB), max_total_bytes (50MB), max_bytes (1GB), global concurrency (20), per_provider concurrency (10), and timeout_ms (600000).
+- **Type cleanup** (types.ts): Removed duplicate `max_output_tokens` from `RoleConfig`, keeping only `maxOutputTokens`.
+- **Node engine** (package.json): Bumped minimum Node version to `>=20.3` for `AbortSignal.any()` support.
+
+**Rejected (would harm usability without proportional security benefit):**
+
+- HTTPS-only enforcement (breaks localhost development)
+- Removing upward config search (usability regression)
+- Removing `wire_api` field (breaking change)
+- TTL reduction from 168h to 24h (cost increase)
+- Skipping ALL symlinks (breaks legitimate workspace structures)
+- Rate limiter (broken design, would stall legitimate work)
+- Removing diagnostic fields (essential debugging information)
+- 30-minute job TTL auto-cleanup (jobs would disappear before retrieval)
+- Provider `dispose()` clearing apiKey (unsafe reference semantics)
+
 ## v0.1.1 — 2026-06-09
 
 ### fix: add missing completedAt and isolate onComplete callback errors in jobs.ts

@@ -25,7 +25,7 @@ const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_writ
 
 export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   const server = new McpServer(
-    { name: "external-subagents-mcp", version: "0.1.1" },
+    { name: "external-subagents-mcp", version: "0.1.2" },
     { instructions: SERVER_INSTRUCTIONS }
   );
 
