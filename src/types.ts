@@ -43,7 +43,6 @@ export interface ProviderClient {
 export interface RoleConfig {
   provider: string;
   maxOutputTokens: number;
-  max_output_tokens: number;
 }
 
 export type JobKind = "review_diff" | "summarize_paths" | "find_relevant_files" | "analyze_log";

@@ -44,7 +44,7 @@ describe("normalizeConfig", () => {
     expect(config.workspace.deny).toContain("**/.env*");
     expect(config.cache.dir).toBe("/repo/.external-subagents/cache");
     expect(config.concurrency.global).toBe(3);
-    expect(config.roles.summarizer.max_output_tokens).toBe(2000);
+    expect(config.roles.summarizer.maxOutputTokens).toBe(2000);
   });
 
   it("activates the selected profile and supports provider shorthand role entries", () => {
@@ -90,7 +90,7 @@ describe("normalizeConfig", () => {
     expect(config.roles.summarizer.provider).toBe("lite");
     expect(config.roles.reviewer.provider).toBe("pro");
     expect(config.roles.file_finder.provider).toBe("standard");
-    expect(config.roles.file_finder.max_output_tokens).toBe(1200);
+    expect(config.roles.file_finder.maxOutputTokens).toBe(1200);
   });
 
   it("normalizes auto routing rules without making them rewrite inputs", () => {

@@ -192,6 +192,8 @@ export class JobManager {
       job.error = report.status === "FAILED" ? report.summary : undefined;
       job.completedAt = new Date().toISOString();
       job.elapsedMs = Date.now() - started;
+      // Clear prompt reference to free memory after job completes
+      job.prompt = "";
       try {
         await job.onComplete?.(publicJob(job));
       } catch {
@@ -207,6 +209,8 @@ export class JobManager {
       } else {
         job.state = "cancelled";
       }
+      // Clear prompt reference even on error
+      job.prompt = "";
     } finally {
       this.runningGlobal -= 1;
       this.runningByProvider.set(providerName, Math.max(0, (this.runningByProvider.get(providerName) ?? 1) - 1));

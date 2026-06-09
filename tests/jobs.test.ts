@@ -17,7 +17,7 @@ describe("JobManager", () => {
     };
     const manager = new JobManager({
       providers: new Map([["local", provider]]),
-      roles: new Map([["reviewer", { provider: "local", maxOutputTokens: 1000, max_output_tokens: 1000 }]]),
+      roles: new Map([["reviewer", { provider: "local", maxOutputTokens: 1000 }]]),
       globalConcurrency: 1,
       perProviderConcurrency: 1
     });
@@ -58,7 +58,7 @@ describe("JobManager", () => {
         ["glm", glm],
         ["fast", fast]
       ]),
-      roles: new Map([["file_finder", { provider: "glm", maxOutputTokens: 1000, max_output_tokens: 1000 }]]),
+      roles: new Map([["file_finder", { provider: "glm", maxOutputTokens: 1000 }]]),
       routing: {
         mode: "auto",
         autoRules: [{ kinds: ["find_relevant_files"], provider: "fast" }]
@@ -99,7 +99,7 @@ describe("JobManager", () => {
     };
     const manager = new JobManager({
       providers: new Map([["long_context", longContext]]),
-      roles: new Map([["log_analyst", { provider: "long_context", maxOutputTokens: 1000, max_output_tokens: 1000 }]]),
+      roles: new Map([["log_analyst", { provider: "long_context", maxOutputTokens: 1000 }]]),
       routing: {
         mode: "auto",
         autoRules: [{ role: "log_analyst", minInputBytes: 10, provider: "long_context", maxOutputTokens: 4000 }]
@@ -137,7 +137,7 @@ describe("JobManager", () => {
     };
     const manager = new JobManager({
       providers: new Map([["mimo", provider]]),
-      roles: new Map([["log_analyst", { provider: "mimo", maxOutputTokens: 1200, max_output_tokens: 1200 }]]),
+      roles: new Map([["log_analyst", { provider: "mimo", maxOutputTokens: 1200 }]]),
       routing: {
         mode: "profile",
         budgetRules: [{ name: "long_logs", role: "log_analyst", minInputBytes: 10, maxOutputTokens: 3500 }],
@@ -179,7 +179,7 @@ describe("JobManager", () => {
     };
     const manager = new JobManager({
       providers: new Map([["mimo", provider]]),
-      roles: new Map([["log_analyst", { provider: "mimo", maxOutputTokens: 1200, max_output_tokens: 1200 }]]),
+      roles: new Map([["log_analyst", { provider: "mimo", maxOutputTokens: 1200 }]]),
       routing: {
         mode: "profile",
         budgetRules: [{ name: "long_logs", role: "log_analyst", minInputBytes: 10, maxOutputTokens: 3500 }],

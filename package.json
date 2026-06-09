@@ -4,7 +4,7 @@
   "description": "A read-only MCP server that delegates large-context review and summarization work to OpenAI-compatible external models.",
   "type": "module",
   "bin": {
-    "external-subagents-mcp": "./dist/index.js"
+    "external-subagents-mcp": "dist/index.js"
   },
   "files": [
     "dist/**/*.js",
@@ -40,7 +40,7 @@
     "url": "https://github.com/PaysNatal/external-subagents-mcp/issues"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.3"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

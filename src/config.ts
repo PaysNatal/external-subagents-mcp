@@ -35,7 +35,7 @@ const providerSchema = z
     api_key: z.never().optional(),
     model: z.string().min(1),
     wire_api: z.literal("chat_completions").default("chat_completions"),
-    timeout_ms: z.number().int().positive().default(120000)
+    timeout_ms: z.number().int().positive().max(600000).default(120000)
   })
   .strict();
 
@@ -91,21 +91,21 @@ const rawConfigSchema = z
         root: z.string().optional(),
         allow: z.array(z.string()).default(DEFAULT_ALLOW),
         deny: z.array(z.string()).default(DEFAULT_DENY),
-        max_file_bytes: z.number().int().positive().default(262144),
-        max_total_bytes: z.number().int().positive().default(2097152)
+        max_file_bytes: z.number().int().positive().max(10485760).default(262144),
+        max_total_bytes: z.number().int().positive().max(52428800).default(2097152)
       })
       .optional(),
     cache: z
       .object({
         dir: z.string().default(".external-subagents/cache"),
         ttl_hours: z.number().positive().default(168),
-        max_bytes: z.number().int().positive().default(524288000)
+        max_bytes: z.number().int().positive().max(1073741824).default(524288000)
       })
       .optional(),
     concurrency: z
       .object({
-        global: z.number().int().positive().default(3),
-        per_provider: z.number().int().positive().default(2)
+        global: z.number().int().positive().max(20).default(3),
+        per_provider: z.number().int().positive().max(10).default(2)
       })
       .optional(),
     providers: z.record(z.string(), providerSchema),
@@ -223,8 +223,7 @@ function normalizeRoleMap(rawRoles: z.infer<typeof roleMapSchema>, providers: Re
         name,
         {
           provider: role.provider,
-          maxOutputTokens,
-          max_output_tokens: maxOutputTokens
+          maxOutputTokens
         }
       ];
     })

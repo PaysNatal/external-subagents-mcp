@@ -55,13 +55,36 @@ class SafeWorkspace implements WorkspaceReader {
 
     for (const relativePath of relativePaths) {
       try {
-        const doc = await this.readAllowedFile(relativePath);
-        if (totalBytes + doc.bytes > this.config.workspace.maxTotalBytes) {
-          omitted.push(`${doc.path}: omitted because max_total_bytes would be exceeded`);
+        // Stat + check quota BEFORE reading the file, avoiding wasted I/O
+        const safeRelative = normalizeRelativePath(relativePath);
+        assertAllowedByGlob(safeRelative, this.config);
+        const absolutePath = path.resolve(this.config.workspace.root, safeRelative);
+        await assertInsideWorkspace(absolutePath, this.config.workspace.root);
+        const fileStat = await stat(absolutePath);
+        if (!fileStat.isFile()) {
+          omitted.push(`${relativePath}: path is not a regular file`);
           continue;
         }
-        totalBytes += doc.bytes;
-        documents.push(doc);
+        if (fileStat.size > this.config.workspace.maxFileBytes) {
+          omitted.push(`${relativePath}: file exceeds max_file_bytes (${fileStat.size} > ${this.config.workspace.maxFileBytes})`);
+          continue;
+        }
+        if (totalBytes + fileStat.size > this.config.workspace.maxTotalBytes) {
+          omitted.push(`${relativePath}: omitted because max_total_bytes would be exceeded`);
+          continue;
+        }
+        const bytes = await readFile(absolutePath);
+        if (looksBinary(bytes)) {
+          omitted.push(`${relativePath}: binary file is not allowed`);
+          continue;
+        }
+        totalBytes += fileStat.size;
+        documents.push({
+          path: safeRelative,
+          absolutePath,
+          text: bytes.toString("utf8"),
+          bytes: fileStat.size
+        });
       } catch (error) {
         omitted.push(`${relativePath}: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -92,12 +115,65 @@ class SafeWorkspace implements WorkspaceReader {
   }
 }
 
-async function walk(root: string, onFile: (absolute: string) => Promise<void>): Promise<void> {
+const MAX_DEPTH = 50;
+
+async function walk(
+  root: string,
+  onFile: (absolute: string) => Promise<void>,
+  depth = 0,
+  visited = new Set<string>()
+): Promise<void> {
+  if (depth > MAX_DEPTH) {
+    return;
+  }
+
   const entries = await readdir(root, { withFileTypes: true });
   for (const entry of entries) {
     const absolute = path.join(root, entry.name);
+
+    // Skip symlinks that resolve outside workspace; keep internal symlinks
+    if (entry.isSymbolicLink()) {
+      try {
+        const resolved = await realpath(absolute);
+        const realRoot = await realpath(root);
+        const rel = path.relative(realRoot, resolved);
+        if (rel.startsWith("..") || path.isAbsolute(rel)) {
+          continue; // symlink escapes workspace — skip
+        }
+        // Internal symlink: follow it like a regular entry
+        const resolvedStat = await lstat(resolved);
+        if (resolvedStat.isDirectory()) {
+          if (visited.has(resolved)) {
+            continue; // cycle detected
+          }
+          visited.add(resolved);
+          await walk(resolved, onFile, depth + 1, visited);
+        } else if (resolvedStat.isFile()) {
+          await onFile(absolute);
+        }
+      } catch {
+        // Dangling symlink or permission error — skip
+        continue;
+      }
+      continue;
+    }
+
     if (entry.isDirectory()) {
-      await walk(absolute, onFile);
+      try {
+        const resolved = await realpath(absolute);
+        if (visited.has(resolved)) {
+          continue; // cycle detected
+        }
+        visited.add(resolved);
+        await walk(absolute, onFile, depth + 1, visited);
+      } catch (error) {
+        // Skip inaccessible directories gracefully
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "EACCES" || code === "EPERM") {
+          continue;
+        }
+        continue;
+      }
     } else if (entry.isFile()) {
       await onFile(absolute);
     }
@@ -130,7 +206,15 @@ function isDenied(relativePath: string, config: NormalizedConfig): boolean {
 }
 
 async function assertInsideWorkspace(absolutePath: string, workspaceRoot: string): Promise<void> {
-  await lstat(absolutePath);
+  // Check for dangling symlinks and give clear error
+  const entryStat = await lstat(absolutePath);
+  if (entryStat.isSymbolicLink()) {
+    try {
+      await realpath(absolutePath);
+    } catch {
+      throw new Error(`Symbolic link points to a non-existent target: ${absolutePath}`);
+    }
+  }
   const resolved = await realpath(absolutePath);
   const realRoot = await realpath(workspaceRoot);
   const relative = path.relative(realRoot, resolved);

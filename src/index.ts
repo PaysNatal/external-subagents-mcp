@@ -12,10 +12,32 @@ async function main(): Promise<void> {
 
   const app = createAppFromEnvironment();
   const server = createMcpServer(app);
+
+  // Graceful shutdown on SIGTERM/SIGINT
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    try {
+      await server.close();
+    } catch {
+      // best effort
+    }
+    process.exit(0);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+
   await server.connect(new StdioServerTransport());
 }
 
 main().catch(error => {
-  console.error(error instanceof Error ? error.message : String(error));
+  // Sanitize startup errors to avoid leaking paths in stderr
+  const isDebug = process.env.DEBUG === "external-subagents-mcp";
+  console.error(
+    isDebug
+      ? (error instanceof Error ? error.stack ?? error.message : String(error))
+      : "Failed to start external-subagents-mcp server. Run with DEBUG=external-subagents-mcp for details."
+  );
   process.exit(1);
 });

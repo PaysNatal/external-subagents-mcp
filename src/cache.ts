@@ -33,15 +33,26 @@ export class DiskCache {
         return undefined;
       }
       return JSON.parse(await readFile(file, "utf8")) as CachedJobResult;
-    } catch {
+    } catch (error) {
+      // Distinguish expected ENOENT from real errors
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.error(`Cache read error for ${key}:`, error instanceof Error ? error.message : String(error));
+      }
       return undefined;
     }
   }
 
+  // Serialize writes to prevent concurrent cache corruption
+  private writeLock: Promise<void> = Promise.resolve();
+
   async set(key: string, result: CachedJobResult): Promise<void> {
-    await mkdir(this.options.dir, { recursive: true });
-    await this.enforceMaxBytes();
-    await writeFile(this.fileFor(key), JSON.stringify(result, null, 2), "utf8");
+    this.writeLock = this.writeLock.then(async () => {
+      // Restrictive permissions to prevent cache poisoning on shared systems
+      await mkdir(this.options.dir, { recursive: true, mode: 0o700 });
+      await this.enforceMaxBytes();
+      await writeFile(this.fileFor(key), JSON.stringify(result, null, 2), { encoding: "utf8", mode: 0o600 });
+    });
+    return this.writeLock;
   }
 
   private fileFor(key: string): string {
@@ -71,8 +82,11 @@ export class DiskCache {
         await unlink(file.file);
         total -= file.size;
       }
-    } catch {
-      // Cache cleanup is best effort; cache writes will create the directory when needed.
+    } catch (error) {
+      // Log unexpected errors but don't fail the write
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.error("Cache enforceMaxBytes error:", error instanceof Error ? error.message : String(error));
+      }
     }
   }
 }
@@ -82,6 +96,11 @@ function stableStringify(value: unknown): string {
 }
 
 function sortForStableStringify(value: unknown): unknown {
+  if (value === null) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Map) return sortForStableStringify([...value.entries()]);
+  if (value instanceof Set) return sortForStableStringify([...value]);
+  if (Buffer.isBuffer(value)) return value.toString("hex");
   if (Array.isArray(value)) {
     return value.map(sortForStableStringify);
   }
