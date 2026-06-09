@@ -12,7 +12,7 @@ The format follows a simplified [Keep a Changelog](https://keepachangelog.com/) 
 
 ---
 
-## 2026-06-09
+## v0.1.1 — 2026-06-09
 
 ### fix: add missing completedAt and isolate onComplete callback errors in jobs.ts
 
@@ -22,7 +22,7 @@ When a job failed early due to a missing provider or role configuration, the `co
 
 The `routingRuleLabel` helper in `diagnostics.ts` returned `"default"` as its fallback, while the identical function in `jobs.ts` returned `rule.provider`. This inconsistency could cause diagnostic reports to display a different label than the one used internally for routing. Both now use `rule.provider` as the fallback for consistency.
 
-## 2026-06-08
+## v0.1.0 — 2026-06-08
 
 ### feat: compact-aware output and minimal REPORT_CONTRACT to save Codex tokens
 
@@ -58,8 +58,6 @@ Rewrote all 10 MCP tool descriptions and titles to include trigger keywords (deb
 
 Added `phase` (discovery/analysis/verification/recommendation) and `depends_on` (cross-reference to earlier findings) to DelegateFinding type, delegateReportSchema, and REPORT_CONTRACT. These fields let Codex audit whether a sub-agent's reasoning chain is internally consistent before acting on the report, reducing the risk of building on incorrect foundations. Also excluded source maps from npm package (dist/**/*.js and dist/**/*.d.ts only — package size reduced 38%), and added repository/homepage/bugs/author fields to package.json.
 
-## 2026-06-07
-
 ### docs: simplify setup and add config init
 
 Someone else rewrote the README to be beginner-friendly: added an `init` CLI command that copies the example config to the project root, step-by-step environment variable setup with macOS/Linux/Windows persistence instructions, semantic provider names, and prominent Profiles section.
@@ -83,8 +81,6 @@ Added `profiles` (role-to-provider assignment maps) and `routing.mode = "auto"` 
 ### fix: require keys only for active providers
 
 API keys are now lazy by provider use. A missing key for an unused provider does not prevent startup; only jobs that actually route to that provider fail clearly.
-
-## 2026-06-06
 
 ### feat: scaffold external subagents mcp
 
