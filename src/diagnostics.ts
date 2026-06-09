@@ -186,5 +186,5 @@ function routingRuleLabel(rule: RoutingRule): string {
   if (rule.role) {
     return `role:${rule.role}`;
   }
-  return "default";
+  return rule.provider;
 }

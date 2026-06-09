@@ -165,6 +165,7 @@ export class JobManager {
     if (!role || !provider || !providerName) {
       job.state = "failed";
       job.error = "Missing provider or role configuration.";
+      job.completedAt = new Date().toISOString();
       return;
     }
 
@@ -191,7 +192,12 @@ export class JobManager {
       job.error = report.status === "FAILED" ? report.summary : undefined;
       job.completedAt = new Date().toISOString();
       job.elapsedMs = Date.now() - started;
-      await job.onComplete?.(publicJob(job));
+      try {
+        await job.onComplete?.(publicJob(job));
+      } catch {
+        // Ignore callback errors (e.g. cache write failure) to prevent
+        // overwriting the already-set successful job state.
+      }
     } catch (error) {
       if (!job.abortController.signal.aborted) {
         job.state = "failed";

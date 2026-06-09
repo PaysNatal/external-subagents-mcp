@@ -12,21 +12,35 @@ The format follows a simplified [Keep a Changelog](https://keepachangelog.com/) 
 
 ---
 
+## 2026-06-09
+
+### fix: add missing completedAt and isolate onComplete callback errors in jobs.ts
+
+When a job failed early due to a missing provider or role configuration, the `completedAt` timestamp was never set, leaving callers unable to determine whether the job had reached a terminal state. Additionally, if the `onComplete` callback (used for cache persistence) threw an error after a job had already been marked completed, the outer catch block would overwrite the successful state to "failed". Both issues are now fixed: early-failure paths set `completedAt`, and the `onComplete` callback is wrapped in its own isolated try/catch so that cache-write failures no longer corrupt the job's actual completion state.
+
+### fix: align routingRuleLabel fallback across diagnostics and jobs
+
+The `routingRuleLabel` helper in `diagnostics.ts` returned `"default"` as its fallback, while the identical function in `jobs.ts` returned `rule.provider`. This inconsistency could cause diagnostic reports to display a different label than the one used internally for routing. Both now use `rule.provider` as the fallback for consistency.
+
 ## 2026-06-08
 
 ### feat: compact-aware output and minimal REPORT_CONTRACT to save Codex tokens
 
 Token-saving changes that address two risks identified by comparing our architecture to cc-switch's translation-layer issues: (1) third-party model JSON format failure causing cheap tokens to be wasted on FAILED reports, and (2) Codex compact compression dropping structured findings/evidence, forcing expensive token re-verification.
 
-**A. Minimal REPORT_CONTRACT**: The prompt sent to external models now requires only `status` and `summary` as mandatory JSON fields. `findings`, `next_actions`, and `omitted` are described as optional but valuable. Models that cannot produce valid nested JSON can still return a useful report, reducing the FAILED report rate for lite-tier models from approximately 30-40% to near-zero.
+**1. Minimal REPORT_CONTRACT**: The prompt sent to external models now requires only `status` and `summary` as mandatory JSON fields. `findings`, `next_actions`, and `omitted` are described as optional but valuable. Models that cannot produce valid nested JSON can still return a useful report, reducing the FAILED report rate for lite-tier models from approximately 30-40% to near-zero.
 
-**D. Fallback findings extractor**: When a report has no findings but contains free text outside the JSON block, the server extracts approximate findings by detecting severity keywords (critical, high, medium, low, info) and file-path patterns (e.g. `src/auth.ts:42-56`). Each extracted finding gets a confidence of 0.3 and the recommendation "Verify manually before acting." This runs at zero additional token cost.
+**2. Fallback findings extractor**: When a report has no findings but contains free text outside the JSON block, the server extracts approximate findings by detecting severity keywords (critical, high, medium, low, info) and file-path patterns (e.g. `src/auth.ts:42-56`). Each extracted finding gets a confidence of 0.3 and the recommendation "Verify manually before acting." This runs at zero additional token cost.
 
-**E. Dual-layer tool result output**: Every MCP tool response now has two layers — a short plain-text summary above a `---` separator, followed by the full JSON. The summary includes status, a one-line conclusion, severity ranking of findings, and evidence file paths. If Codex compact drops the JSON structure, the summary line still preserves the key conclusions. Adds approximately 50-80 tokens per response but can save 1000-3000 expensive Codex tokens that would otherwise be spent re-reading files to locate evidence.
+**3. Dual-layer tool result output**: Every MCP tool response now has two layers — a short plain-text summary above a `---` separator, followed by the full JSON. The summary includes status, a one-line conclusion, severity ranking of findings, and evidence file paths. If Codex compact drops the JSON structure, the summary line still preserves the key conclusions. Adds approximately 50-80 tokens per response but can save 1000-3000 expensive Codex tokens that would otherwise be spent re-reading files to locate evidence.
 
-**F. Compact retention guidance**: SERVER_INSTRUCTIONS now includes an explicit instruction telling Codex to preserve the plain-text summary line when compacting context, because it holds the key conclusions and file references needed for verification.
+**4. Compact retention guidance**: SERVER_INSTRUCTIONS now includes an explicit instruction telling Codex to preserve the plain-text summary line when compacting context, because it holds the key conclusions and file references needed for verification.
 
-**G. Findings severity descending sort**: All findings in delegate reports are now sorted high → medium → low → info before returning. If compact truncates the findings list, the most important findings survive first.
+**5. Findings severity descending sort**: All findings in delegate reports are now sorted high → medium → low → info before returning. If compact truncates the findings list, the most important findings survive first.
+
+### feat: add delegate_cancel tool
+
+Added `delegate_cancel` to cancel a queued or running delegate job. Already-completed or failed jobs are left intact. This gives Codex the ability to abort in-flight work that is no longer needed.
 
 ### docs: rewrite Profiles section with clear 2+1 structure
 
