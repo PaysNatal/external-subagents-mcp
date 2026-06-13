@@ -1,5 +1,5 @@
 import { failedReport, parseDelegateReport } from "./report.js";
-import type { DelegateReport, ProviderClient, ProviderRunRequest } from "./types.js";
+import type { ProviderClient, ProviderRunRequest, ProviderRunResult, ProviderUsage } from "./types.js";
 
 export interface ProviderOptions {
   name: string;
@@ -17,6 +17,11 @@ interface ChatCompletionsResponse {
       content?: string | null;
     };
   }>;
+  usage?: {
+    prompt_tokens?: unknown;
+    completion_tokens?: unknown;
+    total_tokens?: unknown;
+  };
 }
 
 export class OpenAICompatibleProvider implements ProviderClient {
@@ -32,7 +37,7 @@ export class OpenAICompatibleProvider implements ProviderClient {
     this.chatCompletionsUrl = resolveChatCompletionsUrl(options.baseUrl, options.chatCompletionsPath);
   }
 
-  async runReport(request: ProviderRunRequest): Promise<DelegateReport> {
+  async runReport(request: ProviderRunRequest): Promise<ProviderRunResult> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(new Error("Provider request timed out.")), this.timeoutMs);
     const signal = request.signal ? AbortSignal.any([request.signal, controller.signal]) : controller.signal;
@@ -57,30 +62,49 @@ export class OpenAICompatibleProvider implements ProviderClient {
       });
 
       if (!response.ok) {
-        return failedReport(`Provider ${this.name} returned HTTP ${response.status}: ${await safeBody(response)}`);
+        return { report: failedReport(`Provider ${this.name} returned HTTP ${response.status}: ${await safeBody(response)}`) };
       }
 
       const data = (await response.json()) as ChatCompletionsResponse;
       const content = data.choices?.[0]?.message?.content;
       if (!content) {
-        return failedReport(`Provider ${this.name} returned no message content.`);
+        return { report: failedReport(`Provider ${this.name} returned no message content.`), usage: normalizeUsage(data.usage) };
       }
 
       try {
-        return parseDelegateReport(content);
+        return { report: parseDelegateReport(content), usage: normalizeUsage(data.usage) };
       } catch (error) {
-        return failedReport(
-          `Provider ${this.name} returned output that could not be parsed as the delegate report JSON contract: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+        return {
+          report: failedReport(
+            `Provider ${this.name} returned output that could not be parsed as the delegate report JSON contract: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          ),
+          usage: normalizeUsage(data.usage)
+        };
       }
     } catch (error) {
-      return failedReport(`Provider ${this.name} request failed: ${error instanceof Error ? error.message : String(error)}`);
+      return { report: failedReport(`Provider ${this.name} request failed: ${error instanceof Error ? error.message : String(error)}`) };
     } finally {
       clearTimeout(timeout);
     }
   }
+}
+
+function normalizeUsage(raw: ChatCompletionsResponse["usage"]): ProviderUsage | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const usage: ProviderUsage = {
+    promptTokens: validTokenCount(raw.prompt_tokens),
+    completionTokens: validTokenCount(raw.completion_tokens),
+    totalTokens: validTokenCount(raw.total_tokens)
+  };
+  return Object.values(usage).some(value => value !== undefined) ? usage : undefined;
+}
+
+function validTokenCount(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 export function resolveChatCompletionsUrl(baseUrl: string, chatCompletionsPath = "chat/completions"): string {

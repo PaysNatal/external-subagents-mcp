@@ -35,9 +35,20 @@ export interface ProviderRunRequest {
   signal?: AbortSignal;
 }
 
+export interface ProviderUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
+export interface ProviderRunResult {
+  report: DelegateReport;
+  usage?: ProviderUsage;
+}
+
 export interface ProviderClient {
   name: string;
-  runReport(request: ProviderRunRequest): Promise<DelegateReport>;
+  runReport(request: ProviderRunRequest): Promise<ProviderRunResult>;
 }
 
 export interface RoleConfig {

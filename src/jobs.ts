@@ -179,13 +179,14 @@ export class JobManager {
     job.state = "running";
 
     try {
-      const report = await provider.runReport({
+      const result = await provider.runReport({
         role: job.role,
         system: "You are an external read-only subagent. You cannot edit files, run shell commands, or apply patches.",
         user: job.prompt,
         maxOutputTokens: job.maxOutputTokens ?? role.maxOutputTokens,
         signal: job.abortController.signal
       });
+      const report = result.report;
       if (job.abortController.signal.aborted) {
         job.state = "cancelled";
         return;

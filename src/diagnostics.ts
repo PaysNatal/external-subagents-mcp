@@ -143,7 +143,7 @@ export async function smokeProvider(
     timeoutMs: providerConfig.timeout_ms,
     fetch: input.fetch
   });
-  const report = await provider.runReport({
+  const result = await provider.runReport({
     role: "provider_smoke",
     system: "Return only valid JSON. Do not include markdown.",
     user: [
@@ -152,6 +152,7 @@ export async function smokeProvider(
     ].join("\n\n"),
     maxOutputTokens: input.maxOutputTokens ?? 500
   });
+  const report = result.report;
 
   return {
     ok: report.status !== "FAILED",
