@@ -10,6 +10,7 @@ export interface StartJobInput {
   cached?: CachedJobResult;
   inputHash?: string;
   inputBytes?: number;
+  workspaceRoot?: string;
   maxOutputTokens?: number;
   onComplete?: (job: JobRecord) => Promise<void>;
 }
@@ -72,6 +73,7 @@ export class JobManager {
         report: input.cached.report,
         maxOutputTokens,
         budgetSource,
+        workspaceRoot: input.workspaceRoot,
         prompt: "",
         abortController: new AbortController()
       };
@@ -94,6 +96,7 @@ export class JobManager {
       inputHash: input.inputHash,
       maxOutputTokens,
       budgetSource,
+      workspaceRoot: input.workspaceRoot,
       onComplete: input.onComplete,
       abortController: new AbortController()
     };
@@ -324,7 +327,8 @@ function publicJob(job: QueuedJob | JobRecord): JobRecord {
     error,
     report,
     maxOutputTokens,
-    budgetSource
+    budgetSource,
+    workspaceRoot
   } = job;
   return {
     id,
@@ -341,7 +345,8 @@ function publicJob(job: QueuedJob | JobRecord): JobRecord {
     error,
     report,
     maxOutputTokens,
-    budgetSource
+    budgetSource,
+    workspaceRoot
   };
 }
 

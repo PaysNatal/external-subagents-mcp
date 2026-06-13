@@ -5,13 +5,13 @@ import type { NormalizedConfig } from "./config.js";
 import type { ProviderSmokeInput, ProviderSmokeReport, ProviderStatusReport } from "./diagnostics.js";
 import type { JobManager } from "./jobs.js";
 import type { JobKind, JobRecord } from "./types.js";
-import type { WorkspaceReader } from "./workspace.js";
+import type { WorkspaceResolver } from "./workspace.js";
 
 export type CacheMode = "read_write" | "read_only" | "skip";
 
 export interface ExternalSubagentsAppOptions {
   config: NormalizedConfig;
-  workspace: WorkspaceReader;
+  workspaceResolver: WorkspaceResolver;
   cache: DiskCache;
   jobs: JobManager;
   diagnostics?: {
@@ -21,6 +21,7 @@ export interface ExternalSubagentsAppOptions {
 }
 
 export interface DelegateSummarizePathsInput {
+  workspace_root?: string;
   paths: string[];
   focus: string;
   output_budget?: number;
@@ -28,6 +29,7 @@ export interface DelegateSummarizePathsInput {
 }
 
 export interface DelegateReviewDiffInput {
+  workspace_root?: string;
   base_ref?: string;
   target_ref?: string;
   diff_text?: string;
@@ -38,6 +40,7 @@ export interface DelegateReviewDiffInput {
 }
 
 export interface DelegateFindRelevantFilesInput {
+  workspace_root?: string;
   query: string;
   globs?: string[];
   focus: string;
@@ -47,6 +50,7 @@ export interface DelegateFindRelevantFilesInput {
 }
 
 export interface DelegateAnalyzeLogInput {
+  workspace_root?: string;
   log_path?: string;
   log_text?: string;
   focus: string;
@@ -58,7 +62,8 @@ export class ExternalSubagentsApp {
   constructor(private readonly options: ExternalSubagentsAppOptions) {}
 
   async delegateSummarizePaths(input: DelegateSummarizePathsInput): Promise<JobRecord> {
-    const { documents, omitted } = await this.options.workspace.readAllowedFiles(input.paths);
+    const resolved = await this.options.workspaceResolver.resolve(input.workspace_root);
+    const { documents, omitted } = await resolved.workspace.readAllowedFiles(input.paths);
     if (documents.length === 0) {
       throw new Error(`No readable allowed files were provided. Omitted: ${omitted.join("; ")}`);
     }
@@ -74,6 +79,7 @@ export class ExternalSubagentsApp {
         omitted
       },
       outputBudget: input.output_budget,
+      workspaceRoot: resolved.effectiveRoot,
       prompt: [
         baseInstructions("summarizer", input.output_budget),
         `Focus: ${input.focus}`,
@@ -86,7 +92,8 @@ export class ExternalSubagentsApp {
   }
 
   async delegateReviewDiff(input: DelegateReviewDiffInput): Promise<JobRecord> {
-    const contextDocs = input.paths?.length ? await this.options.workspace.readAllowedFiles(input.paths) : { documents: [], omitted: [] };
+    const resolved = await this.options.workspaceResolver.resolve(input.workspace_root);
+    const contextDocs = input.paths?.length ? await resolved.workspace.readAllowedFiles(input.paths) : { documents: [], omitted: [] };
     const diff = input.diff_text?.trim();
     if (!diff && contextDocs.documents.length === 0) {
       throw new Error("delegate_review_diff requires diff_text or readable paths. This MCP server does not run git commands.");
@@ -106,6 +113,7 @@ export class ExternalSubagentsApp {
         omitted: contextDocs.omitted
       },
       outputBudget: input.output_budget,
+      workspaceRoot: resolved.effectiveRoot,
       prompt: [
         baseInstructions("reviewer", input.output_budget),
         `Focus: ${input.focus}`,
@@ -120,7 +128,8 @@ export class ExternalSubagentsApp {
   }
 
   async delegateFindRelevantFiles(input: DelegateFindRelevantFilesInput): Promise<JobRecord> {
-    const candidates = await this.options.workspace.listAllowedFiles(input.globs, input.max_results ?? 200);
+    const resolved = await this.options.workspaceResolver.resolve(input.workspace_root);
+    const candidates = await resolved.workspace.listAllowedFiles(input.globs, input.max_results ?? 200);
     if (candidates.length === 0) {
       throw new Error("No allowed files matched the requested globs.");
     }
@@ -137,6 +146,7 @@ export class ExternalSubagentsApp {
         output_budget: input.output_budget
       },
       outputBudget: input.output_budget,
+      workspaceRoot: resolved.effectiveRoot,
       prompt: [
         baseInstructions("file_finder", input.output_budget),
         `Query: ${input.query}`,
@@ -149,9 +159,10 @@ export class ExternalSubagentsApp {
   }
 
   async delegateAnalyzeLog(input: DelegateAnalyzeLogInput): Promise<JobRecord> {
+    const resolved = await this.options.workspaceResolver.resolve(input.workspace_root);
     const logText =
       input.log_text ??
-      (input.log_path ? (await this.options.workspace.readAllowedFile(input.log_path)).text : undefined);
+      (input.log_path ? (await resolved.workspace.readAllowedFile(input.log_path)).text : undefined);
     if (!logText?.trim()) {
       throw new Error("delegate_analyze_log requires log_text or an allowed log_path.");
     }
@@ -167,6 +178,7 @@ export class ExternalSubagentsApp {
         output_budget: input.output_budget
       },
       outputBudget: input.output_budget,
+      workspaceRoot: resolved.effectiveRoot,
       prompt: [
         baseInstructions("log_analyst", input.output_budget),
         `Focus: ${input.focus}`,
@@ -214,6 +226,7 @@ export class ExternalSubagentsApp {
     inputForCache: unknown;
     cacheMode?: CacheMode;
     outputBudget?: number;
+    workspaceRoot: string;
   }): Promise<JobRecord> {
     const cacheMode = input.cacheMode ?? "read_write";
     const inputBytes = Buffer.byteLength(input.prompt, "utf8");
@@ -223,7 +236,8 @@ export class ExternalSubagentsApp {
         role: input.role,
         roleConfig: this.options.config.roles[input.role],
         routing: this.options.config.routing,
-        inputBytes
+        inputBytes,
+        workspaceRoot: input.workspaceRoot
       }
     };
     const cacheKey = cacheMode === "skip" ? undefined : this.options.cache.keyFor(input.role, routedInputForCache);
@@ -238,6 +252,7 @@ export class ExternalSubagentsApp {
       cached,
       inputHash,
       inputBytes,
+      workspaceRoot: input.workspaceRoot,
       maxOutputTokens: input.outputBudget,
       onComplete:
         cacheKey && cacheMode === "read_write"

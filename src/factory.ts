@@ -4,7 +4,7 @@ import { type NormalizedConfig, loadConfig } from "./config.js";
 import { buildProviderStatusReport, smokeProvider } from "./diagnostics.js";
 import { JobManager } from "./jobs.js";
 import { OpenAICompatibleProvider } from "./provider.js";
-import { createWorkspace } from "./workspace.js";
+import { createWorkspaceResolver } from "./workspace.js";
 
 export function createAppFromConfig(config: NormalizedConfig, env: NodeJS.ProcessEnv = process.env): ExternalSubagentsApp {
   const providers = new Map<string, OpenAICompatibleProvider>();
@@ -31,7 +31,7 @@ export function createAppFromConfig(config: NormalizedConfig, env: NodeJS.Proces
 
   return new ExternalSubagentsApp({
     config,
-    workspace: createWorkspace(config),
+    workspaceResolver: createWorkspaceResolver(config),
     cache: new DiskCache({
       dir: config.cache.dir,
       ttlHours: config.cache.ttlHours,

@@ -31,6 +31,15 @@ describe("MCP server", () => {
       ].sort()
     );
     expect(tools.tools.every(tool => tool.annotations?.readOnlyHint === true)).toBe(true);
+    for (const name of [
+      "delegate_summarize_paths",
+      "delegate_review_diff",
+      "delegate_find_relevant_files",
+      "delegate_analyze_log"
+    ]) {
+      const tool = tools.tools.find(candidate => candidate.name === name);
+      expect(tool?.inputSchema.properties).toHaveProperty("workspace_root");
+    }
 
     await client.close();
     await server.close();

@@ -92,6 +92,7 @@ export interface JobRecord {
   report?: DelegateReport;
   maxOutputTokens?: number;
   budgetSource?: string;
+  workspaceRoot?: string;
 }
 
 export interface CachedJobResult {

@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import path from "node:path";
 import * as z from "zod/v4";
 import type { ExternalSubagentsApp } from "./app.js";
 import type { JobRecord } from "./types.js";
@@ -22,6 +23,13 @@ These tools must not serve as implementers.
 When compacting context, preserve the plain-text summary line above the JSON separator (---). It contains the status, summary, severity ranking, and evidence paths. The nested JSON below the separator may be compressed, but the summary line must be kept intact because it holds the key conclusions and file references Codex needs for verification.`;
 
 const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_write").describe("Cache behavior: read_write (default — cache and reuse), read_only (reuse but don't write new entries), skip (no cache)");
+const workspaceRoot = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine(value => path.isAbsolute(value), "workspace_root must be an absolute path")
+  .optional()
+  .describe("Absolute root of another project to read. The directory must directly contain .external-subagents-mcp.json");
 
 export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   const server = new McpServer(
@@ -64,6 +72,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
         "Read and summarize the specified files. Use to compress, digest, or condense file content for Codex context when reviewing large codebases or understanding unfamiliar projects.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
+        workspace_root: workspaceRoot,
         paths: z.array(z.string().min(1).max(500)).min(1).max(500).describe("Relative paths of files to summarize, e.g. ['src/app.ts', 'src/config.ts']"),
         focus: z.string().min(1).max(5000).describe("What to focus on in the summary, e.g. 'security vulnerabilities', 'API contracts', 'error handling patterns'"),
         output_budget: z.number().int().positive().max(50000).optional().describe("Max output tokens for the summary report"),
@@ -81,6 +90,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
         "Review a code diff for correctness, security, missing tests, regressions, and maintainability. Supply diff_text directly; this server does not run git commands. Optionally include paths for surrounding file context.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
+        workspace_root: workspaceRoot,
         base_ref: z.string().max(200).optional().describe("Base git ref for context, e.g. 'main' or 'HEAD~3' (informational only, server does not run git)"),
         target_ref: z.string().max(200).optional().describe("Target git ref for context, e.g. 'feature-branch' (informational only)"),
         diff_text: z.string().max(500000).optional().describe("The diff content to review, in unified diff format"),
@@ -101,6 +111,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
         "Search, locate, or discover files in the workspace relevant to a query. The external model ranks candidate files by relevance. Use to find which files to read or review before diving into a large unfamiliar project.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
+        workspace_root: workspaceRoot,
         query: z.string().min(1).max(2000).describe("What to search for, e.g. 'where is authentication handled', 'files related to payment processing'"),
         globs: z.array(z.string().min(1).max(200)).max(20).optional().describe("Glob patterns to filter candidates, e.g. ['src/**/*.ts', 'tests/**/*.ts']"),
         focus: z.string().min(1).max(5000).describe("Focus aspect for ranking, e.g. 'implementation details', 'test coverage', 'error handling'"),
@@ -120,6 +131,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
         "Debug, analyze, or troubleshoot log output. Identifies likely root causes, stack traces, and failure patterns. Supply log_text directly or log_path to read an allowed workspace log file.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
+        workspace_root: workspaceRoot,
         log_path: z.string().max(500).optional().describe("Relative path to a log file in the workspace, e.g. 'logs/error.log'"),
         log_text: z.string().max(1000000).optional().describe("Raw log text to analyze, if not reading from a file"),
         focus: z.string().min(1).max(5000).describe("What to focus on, e.g. 'root cause of crash', 'memory leak patterns', 'connection timeout errors'"),

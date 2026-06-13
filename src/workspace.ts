@@ -38,7 +38,7 @@ export function createWorkspaceResolver(defaultConfig: NormalizedConfig): Worksp
       if (requestedRoot === undefined) {
         return {
           workspace: defaultWorkspace,
-          effectiveRoot: await realpath(defaultConfig.workspace.root)
+          effectiveRoot: defaultConfig.workspace.root
         };
       }
       if (!path.isAbsolute(requestedRoot)) {
