@@ -41,7 +41,7 @@ describe("ExternalSubagentsApp", () => {
       name: "local",
       runReport: vi.fn(async request => {
         expect(request.user).toContain("meaning");
-        return report;
+        return { report, usage: { promptTokens: 700, completionTokens: 100, totalTokens: 800 } };
       })
     };
     const manager = new JobManager({
@@ -75,6 +75,8 @@ describe("ExternalSubagentsApp", () => {
     });
 
     expect(second.cacheHit).toBe(true);
+    expect(second.externalApiCalled).toBe(false);
+    expect(second.usage?.totalTokens).toBe(800);
     expect(provider.runReport).toHaveBeenCalledOnce();
   });
 
@@ -112,7 +114,7 @@ describe("ExternalSubagentsApp", () => {
       runReport: vi.fn(async request => {
         expect(request.user).toContain("authorized-second-project");
         expect(request.user).not.toContain("source = 'default'");
-        return report;
+        return { report };
       })
     };
     const manager = new JobManager({

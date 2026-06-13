@@ -13,7 +13,10 @@ describe("JobManager", () => {
     };
     const provider: ProviderClient = {
       name: "local",
-      runReport: vi.fn(async () => report)
+      runReport: vi.fn(async () => ({
+        report,
+        usage: { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 }
+      }))
     };
     const manager = new JobManager({
       providers: new Map([["local", provider]]),
@@ -26,12 +29,19 @@ describe("JobManager", () => {
       kind: "review_diff",
       role: "reviewer",
       prompt: "Review diff",
+      workspaceRoot: "/repo",
       cacheKey: undefined
     });
 
     const waited = await manager.wait([job.id], 1000);
     expect(waited[0]?.state).toBe("completed");
     expect(manager.result(job.id)?.report?.summary).toBe("finished");
+    expect(manager.result(job.id)).toMatchObject({
+      workspaceRoot: "/repo",
+      inputBytes: 11,
+      externalApiCalled: true,
+      usage: { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 }
+    });
   });
 
   it("auto-routes jobs by kind without changing the original prompt", async () => {
@@ -44,13 +54,13 @@ describe("JobManager", () => {
     };
     const glm: ProviderClient = {
       name: "glm",
-      runReport: vi.fn(async () => report)
+      runReport: vi.fn(async () => ({ report }))
     };
     const fast: ProviderClient = {
       name: "fast",
       runReport: vi.fn(async request => {
         expect(request.user).toBe("Rank these exact candidate files.");
-        return report;
+        return { report };
       })
     };
     const manager = new JobManager({
@@ -94,7 +104,7 @@ describe("JobManager", () => {
       runReport: vi.fn(async request => {
         expect(request.maxOutputTokens).toBe(4000);
         expect(request.user).toBe("x".repeat(20));
-        return report;
+        return { report };
       })
     };
     const manager = new JobManager({
@@ -132,7 +142,7 @@ describe("JobManager", () => {
       name: "mimo",
       runReport: vi.fn(async request => {
         expect(request.maxOutputTokens).toBe(3500);
-        return report;
+        return { report };
       })
     };
     const manager = new JobManager({
@@ -174,7 +184,7 @@ describe("JobManager", () => {
       name: "mimo",
       runReport: vi.fn(async request => {
         expect(request.maxOutputTokens).toBe(900);
-        return report;
+        return { report };
       })
     };
     const manager = new JobManager({
@@ -202,5 +212,83 @@ describe("JobManager", () => {
     expect(job.budgetSource).toBe("input:output_budget");
     await manager.wait([job.id], 1000);
     expect(provider.runReport).toHaveBeenCalledOnce();
+  });
+
+  it("marks cache hits as no external API call while preserving historical usage", () => {
+    const report: DelegateReport = {
+      status: "DONE",
+      summary: "cached",
+      findings: [],
+      next_actions: [],
+      omitted: []
+    };
+    const manager = new JobManager({
+      providers: new Map(),
+      roles: new Map([["reviewer", { provider: "local", maxOutputTokens: 1000 }]]),
+      globalConcurrency: 1,
+      perProviderConcurrency: 1
+    });
+
+    const job = manager.start({
+      kind: "review_diff",
+      role: "reviewer",
+      prompt: "Review diff",
+      inputBytes: 11,
+      workspaceRoot: "/repo",
+      cacheKey: "cached",
+      cached: {
+        id: "original",
+        role: "reviewer",
+        provider: "local",
+        report,
+        usage: { promptTokens: 800, completionTokens: 200, totalTokens: 1000 },
+        createdAt: "2026-06-13T00:00:00.000Z",
+        completedAt: "2026-06-13T00:01:00.000Z",
+        cacheKey: "cached",
+        inputHash: "hash"
+      }
+    });
+
+    expect(job).toMatchObject({
+      state: "completed",
+      cacheHit: true,
+      inputBytes: 11,
+      workspaceRoot: "/repo",
+      externalApiCalled: false,
+      usage: { promptTokens: 800, completionTokens: 200, totalTokens: 1000 }
+    });
+  });
+
+  it("marks failed provider attempts as external API calls", async () => {
+    const failed: DelegateReport = {
+      status: "FAILED",
+      summary: "provider failed",
+      findings: [],
+      next_actions: [],
+      omitted: []
+    };
+    const provider: ProviderClient = {
+      name: "local",
+      runReport: vi.fn(async () => ({ report: failed }))
+    };
+    const manager = new JobManager({
+      providers: new Map([["local", provider]]),
+      roles: new Map([["reviewer", { provider: "local", maxOutputTokens: 1000 }]]),
+      globalConcurrency: 1,
+      perProviderConcurrency: 1
+    });
+
+    const job = manager.start({
+      kind: "review_diff",
+      role: "reviewer",
+      prompt: "Review diff",
+      cacheKey: undefined
+    });
+    const [completed] = await manager.wait([job.id], 1000);
+
+    expect(completed).toMatchObject({
+      state: "failed",
+      externalApiCalled: true
+    });
   });
 });

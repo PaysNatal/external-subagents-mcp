@@ -240,7 +240,7 @@ function renderCompactSummary(data: object): string {
   if (Array.isArray(obj)) {
     const items = obj as Array<Record<string, unknown>>;
     if (items.length > 0 && typeof items[0].state === "string") {
-      return `${items.length} jobs: ${items.map(j => `[${j.state}] ${j.kind}(${j.role})`).join(", ")}`;
+      return `${items.length} jobs: ${items.map(renderJobSummary).join(", ")}`;
     }
     return `${items.length} items`;
   }
@@ -289,5 +289,12 @@ function renderJobSummary(obj: Record<string, unknown>): string {
   const role = String(obj.role);
   const provider = typeof obj.provider === "string" ? obj.provider : "";
   const elapsed = typeof obj.elapsedMs === "number" ? ` (${obj.elapsedMs}ms)` : "";
-  return `[${state}] ${kind}/${role}${provider ? ` via ${provider}` : ""}${elapsed}`;
+  const apiState = obj.cacheHit === true
+    ? "api=cache-hit"
+    : obj.externalApiCalled === true
+      ? "api=called"
+      : "api=not-called";
+  const usage = obj.usage as Record<string, unknown> | undefined;
+  const usageSummary = typeof usage?.totalTokens === "number" ? ` usage=${usage.totalTokens} tokens` : "";
+  return `[${state}] ${kind}(${role})${provider ? ` via ${provider}` : ""}${elapsed} ${apiState}${usageSummary}`;
 }

@@ -54,7 +54,9 @@ describe("MCP server", () => {
       provider: "mimo",
       state: "completed",
       createdAt: "2026-06-08T00:00:00.000Z",
-      cacheHit: false
+      cacheHit: false,
+      externalApiCalled: true,
+      usage: { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 }
     };
     const server = createMcpServer({
       wait: async () => [job]
@@ -72,6 +74,8 @@ describe("MCP server", () => {
     // Verify the compact summary layer is present for JobRecord objects
     expect(text).toContain("[completed]");
     expect(text).toContain("analyze_log(log_analyst)");
+    expect(text).toContain("api=called");
+    expect(text).toContain("usage=1500 tokens");
 
     await client.close();
     await server.close();

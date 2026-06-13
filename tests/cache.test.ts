@@ -23,6 +23,7 @@ describe("DiskCache", () => {
       role: "summarizer",
       provider: "local",
       report,
+      usage: { promptTokens: 700, completionTokens: 100, totalTokens: 800 },
       createdAt: new Date().toISOString(),
       completedAt: new Date().toISOString(),
       cacheKey: key,
@@ -31,6 +32,7 @@ describe("DiskCache", () => {
 
     const cached = await cache.get(key);
     expect(cached?.report.summary).toBe("summary");
+    expect(cached?.usage?.totalTokens).toBe(800);
     expect(JSON.stringify(cached)).not.toContain("very secret source text");
   });
 });

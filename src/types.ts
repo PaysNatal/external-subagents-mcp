@@ -104,6 +104,9 @@ export interface JobRecord {
   maxOutputTokens?: number;
   budgetSource?: string;
   workspaceRoot?: string;
+  inputBytes?: number;
+  externalApiCalled: boolean;
+  usage?: ProviderUsage;
 }
 
 export interface CachedJobResult {
@@ -115,4 +118,5 @@ export interface CachedJobResult {
   completedAt: string;
   cacheKey: string;
   inputHash: string;
+  usage?: ProviderUsage;
 }

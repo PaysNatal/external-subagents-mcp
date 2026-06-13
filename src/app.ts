@@ -268,7 +268,8 @@ export class ExternalSubagentsApp {
                 createdAt: job.createdAt,
                 completedAt: job.completedAt ?? new Date().toISOString(),
                 cacheKey,
-                inputHash
+                inputHash,
+                usage: job.usage
               });
             }
           : undefined

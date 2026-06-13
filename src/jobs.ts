@@ -74,6 +74,9 @@ export class JobManager {
         maxOutputTokens,
         budgetSource,
         workspaceRoot: input.workspaceRoot,
+        inputBytes,
+        externalApiCalled: false,
+        usage: input.cached.usage,
         prompt: "",
         abortController: new AbortController()
       };
@@ -97,6 +100,8 @@ export class JobManager {
       maxOutputTokens,
       budgetSource,
       workspaceRoot: input.workspaceRoot,
+      inputBytes,
+      externalApiCalled: false,
       onComplete: input.onComplete,
       abortController: new AbortController()
     };
@@ -177,6 +182,7 @@ export class JobManager {
     const started = Date.now();
     job.startedAt = new Date(started).toISOString();
     job.state = "running";
+    job.externalApiCalled = true;
 
     try {
       const result = await provider.runReport({
@@ -192,6 +198,7 @@ export class JobManager {
         return;
       }
       job.report = report;
+      job.usage = result.usage;
       job.state = report.status === "FAILED" ? "failed" : "completed";
       job.error = report.status === "FAILED" ? report.summary : undefined;
       job.completedAt = new Date().toISOString();
@@ -329,7 +336,10 @@ function publicJob(job: QueuedJob | JobRecord): JobRecord {
     report,
     maxOutputTokens,
     budgetSource,
-    workspaceRoot
+    workspaceRoot,
+    inputBytes,
+    externalApiCalled,
+    usage
   } = job;
   return {
     id,
@@ -347,7 +357,10 @@ function publicJob(job: QueuedJob | JobRecord): JobRecord {
     report,
     maxOutputTokens,
     budgetSource,
-    workspaceRoot
+    workspaceRoot,
+    inputBytes,
+    externalApiCalled,
+    usage
   };
 }
 
