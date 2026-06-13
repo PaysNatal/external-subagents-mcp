@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import path from "node:path";
 import * as z from "zod/v4";
 import type { ExternalSubagentsApp } from "./app.js";
 import type { JobRecord } from "./types.js";
@@ -6,6 +7,8 @@ import type { JobRecord } from "./types.js";
 export const SERVER_INSTRUCTIONS = `external-subagents-mcp: read-only external model delegates for Codex.
 
 All task tools (summarize, review, find_files, analyze_log) return a job record. Use delegate_wait then delegate_result to retrieve the structured report. Do not use these tools for implementation, patching, shell commands, migrations, formatting, or test execution.
+
+Prefer path-based delegation so large source files do not enter Codex context. When the project to read is not the server's default workspace, pass its absolute root as workspace_root; that root must directly contain .external-subagents-mcp.json. Use diff_text or log_text only when path-based input is unavailable.
 
 The external model output is advisory. Codex must verify cited files and line numbers before changing code.
 
@@ -19,13 +22,24 @@ Tool selection guide:
 
 These tools must not serve as implementers.
 
+Job records expose externalApiCalled, inputBytes, and provider usage when available. A cache hit reports externalApiCalled=false because the current request did not call the provider; any attached usage is historical usage from the original cached run.
+
 When compacting context, preserve the plain-text summary line above the JSON separator (---). It contains the status, summary, severity ranking, and evidence paths. The nested JSON below the separator may be compressed, but the summary line must be kept intact because it holds the key conclusions and file references Codex needs for verification.`;
 
+export const SERVER_VERSION = "0.2.0";
+
 const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_write").describe("Cache behavior: read_write (default — cache and reuse), read_only (reuse but don't write new entries), skip (no cache)");
+const workspaceRoot = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine(value => path.isAbsolute(value), "workspace_root must be an absolute path")
+  .optional()
+  .describe("Absolute root of another project to read. The directory must directly contain .external-subagents-mcp.json");
 
 export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   const server = new McpServer(
-    { name: "external-subagents-mcp", version: "0.1.2" },
+    { name: "external-subagents-mcp", version: SERVER_VERSION },
     { instructions: SERVER_INSTRUCTIONS }
   );
 
@@ -61,9 +75,10 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Summarize workspace files",
       description:
-        "Read and summarize the specified files. Use to compress, digest, or condense file content for Codex context when reviewing large codebases or understanding unfamiliar projects.",
+        "Read and summarize specified files without placing their full content in Codex context. Prefer paths plus workspace_root for large or cross-project codebases.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
+        workspace_root: workspaceRoot,
         paths: z.array(z.string().min(1).max(500)).min(1).max(500).describe("Relative paths of files to summarize, e.g. ['src/app.ts', 'src/config.ts']"),
         focus: z.string().min(1).max(5000).describe("What to focus on in the summary, e.g. 'security vulnerabilities', 'API contracts', 'error handling patterns'"),
         output_budget: z.number().int().positive().max(50000).optional().describe("Max output tokens for the summary report"),
@@ -78,9 +93,10 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Review code diff",
       description:
-        "Review a code diff for correctness, security, missing tests, regressions, and maintainability. Supply diff_text directly; this server does not run git commands. Optionally include paths for surrounding file context.",
+        "Review code for correctness, security, missing tests, regressions, and maintainability. Prefer paths plus workspace_root when reviewing complete files; use diff_text only when a diff is the necessary input.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
+        workspace_root: workspaceRoot,
         base_ref: z.string().max(200).optional().describe("Base git ref for context, e.g. 'main' or 'HEAD~3' (informational only, server does not run git)"),
         target_ref: z.string().max(200).optional().describe("Target git ref for context, e.g. 'feature-branch' (informational only)"),
         diff_text: z.string().max(500000).optional().describe("The diff content to review, in unified diff format"),
@@ -98,9 +114,10 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Search for relevant files",
       description:
-        "Search, locate, or discover files in the workspace relevant to a query. The external model ranks candidate files by relevance. Use to find which files to read or review before diving into a large unfamiliar project.",
+        "Search, locate, or discover relevant files in an authorized workspace. Pass workspace_root for a project other than the server default.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
+        workspace_root: workspaceRoot,
         query: z.string().min(1).max(2000).describe("What to search for, e.g. 'where is authentication handled', 'files related to payment processing'"),
         globs: z.array(z.string().min(1).max(200)).max(20).optional().describe("Glob patterns to filter candidates, e.g. ['src/**/*.ts', 'tests/**/*.ts']"),
         focus: z.string().min(1).max(5000).describe("Focus aspect for ranking, e.g. 'implementation details', 'test coverage', 'error handling'"),
@@ -117,9 +134,10 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Debug and analyze logs",
       description:
-        "Debug, analyze, or troubleshoot log output. Identifies likely root causes, stack traces, and failure patterns. Supply log_text directly or log_path to read an allowed workspace log file.",
+        "Debug, analyze, or troubleshoot logs. Prefer log_path plus workspace_root when the log is in an authorized project; use log_text when no readable path is available.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
+        workspace_root: workspaceRoot,
         log_path: z.string().max(500).optional().describe("Relative path to a log file in the workspace, e.g. 'logs/error.log'"),
         log_text: z.string().max(1000000).optional().describe("Raw log text to analyze, if not reading from a file"),
         focus: z.string().min(1).max(5000).describe("What to focus on, e.g. 'root cause of crash', 'memory leak patterns', 'connection timeout errors'"),
@@ -228,7 +246,7 @@ function renderCompactSummary(data: object): string {
   if (Array.isArray(obj)) {
     const items = obj as Array<Record<string, unknown>>;
     if (items.length > 0 && typeof items[0].state === "string") {
-      return `${items.length} jobs: ${items.map(j => `[${j.state}] ${j.kind}(${j.role})`).join(", ")}`;
+      return `${items.length} jobs: ${items.map(renderJobSummary).join(", ")}`;
     }
     return `${items.length} items`;
   }
@@ -277,5 +295,12 @@ function renderJobSummary(obj: Record<string, unknown>): string {
   const role = String(obj.role);
   const provider = typeof obj.provider === "string" ? obj.provider : "";
   const elapsed = typeof obj.elapsedMs === "number" ? ` (${obj.elapsedMs}ms)` : "";
-  return `[${state}] ${kind}/${role}${provider ? ` via ${provider}` : ""}${elapsed}`;
+  const apiState = obj.cacheHit === true
+    ? "api=cache-hit"
+    : obj.externalApiCalled === true
+      ? "api=called"
+      : "api=not-called";
+  const usage = obj.usage as Record<string, unknown> | undefined;
+  const usageSummary = typeof usage?.totalTokens === "number" ? ` usage=${usage.totalTokens} tokens` : "";
+  return `[${state}] ${kind}(${role})${provider ? ` via ${provider}` : ""}${elapsed} ${apiState}${usageSummary}`;
 }

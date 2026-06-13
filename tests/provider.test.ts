@@ -31,15 +31,15 @@ describe("OpenAICompatibleProvider", () => {
       fetch: fetchMock
     });
 
-    const report = await provider.runReport({
+    const result = await provider.runReport({
       role: "reviewer",
       system: "Return JSON.",
       user: "Review this.",
       maxOutputTokens: 1000
     });
 
-    expect(report.status).toBe("DONE");
-    expect(report.next_actions).toEqual(["verify"]);
+    expect(result.report.status).toBe("DONE");
+    expect(result.report.next_actions).toEqual(["verify"]);
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
@@ -138,14 +138,105 @@ describe("OpenAICompatibleProvider", () => {
       )
     });
 
-    const report = await provider.runReport({
+    const result = await provider.runReport({
       role: "reviewer",
       system: "Return JSON.",
       user: "Review this.",
       maxOutputTokens: 1000
     });
 
-    expect(report.status).toBe("FAILED");
-    expect(report.summary).toMatch(/parse/);
+    expect(result.report.status).toBe("FAILED");
+    expect(result.report.summary).toMatch(/parse/);
+  });
+
+  it("normalizes token usage returned by OpenAI-compatible providers", async () => {
+    const provider = new OpenAICompatibleProvider({
+      name: "local",
+      baseUrl: "https://example.test/v1",
+      apiKey: "secret",
+      model: "example",
+      fetch: vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    status: "DONE",
+                    summary: "ok",
+                    findings: [],
+                    next_actions: [],
+                    omitted: []
+                  })
+                }
+              }
+            ],
+            usage: {
+              prompt_tokens: 1200,
+              completion_tokens: 340,
+              total_tokens: 1540
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    });
+
+    const result = await provider.runReport({
+      role: "reviewer",
+      system: "Return JSON.",
+      user: "Review this.",
+      maxOutputTokens: 1000
+    });
+
+    expect(result.usage).toEqual({
+      promptTokens: 1200,
+      completionTokens: 340,
+      totalTokens: 1540
+    });
+  });
+
+  it("ignores invalid or absent usage without failing a valid report", async () => {
+    const provider = new OpenAICompatibleProvider({
+      name: "local",
+      baseUrl: "https://example.test/v1",
+      apiKey: "secret",
+      model: "example",
+      fetch: vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    status: "DONE",
+                    summary: "ok",
+                    findings: [],
+                    next_actions: [],
+                    omitted: []
+                  })
+                }
+              }
+            ],
+            usage: {
+              prompt_tokens: -1,
+              completion_tokens: 2.5,
+              total_tokens: "unknown"
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    });
+
+    const result = await provider.runReport({
+      role: "reviewer",
+      system: "Return JSON.",
+      user: "Review this.",
+      maxOutputTokens: 1000
+    });
+
+    expect(result.report.status).toBe("DONE");
+    expect(result.usage).toBeUndefined();
   });
 });

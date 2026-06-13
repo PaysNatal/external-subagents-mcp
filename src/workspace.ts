@@ -1,7 +1,7 @@
 import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { minimatch } from "minimatch";
-import type { NormalizedConfig } from "./config.js";
+import { loadConfigFile, type NormalizedConfig } from "./config.js";
 
 export interface WorkspaceDocument {
   path: string;
@@ -16,8 +16,64 @@ export interface WorkspaceReader {
   listAllowedFiles(globs?: string[], maxResults?: number): Promise<string[]>;
 }
 
+export interface ResolvedWorkspace {
+  workspace: WorkspaceReader;
+  requestedRoot?: string;
+  effectiveRoot: string;
+}
+
+export interface WorkspaceResolver {
+  resolve(requestedRoot?: string): Promise<ResolvedWorkspace>;
+}
+
 export function createWorkspace(config: NormalizedConfig): WorkspaceReader {
   return new SafeWorkspace(config);
+}
+
+export function createWorkspaceResolver(defaultConfig: NormalizedConfig): WorkspaceResolver {
+  const defaultWorkspace = createWorkspace(defaultConfig);
+
+  return {
+    async resolve(requestedRoot?: string): Promise<ResolvedWorkspace> {
+      if (requestedRoot === undefined) {
+        return {
+          workspace: defaultWorkspace,
+          effectiveRoot: defaultConfig.workspace.root
+        };
+      }
+      if (!path.isAbsolute(requestedRoot)) {
+        throw new Error("workspace_root must be an absolute path.");
+      }
+
+      const canonicalRequestedRoot = await realpath(requestedRoot);
+      const requestedStat = await stat(canonicalRequestedRoot);
+      if (!requestedStat.isDirectory()) {
+        throw new Error(`workspace_root is not a directory: ${requestedRoot}`);
+      }
+
+      const targetConfigPath = path.join(canonicalRequestedRoot, ".external-subagents-mcp.json");
+      try {
+        const targetConfigStat = await stat(targetConfigPath);
+        if (!targetConfigStat.isFile()) {
+          throw new Error("not a regular file");
+        }
+      } catch {
+        throw new Error(
+          `Cross-project workspace_root must directly contain .external-subagents-mcp.json: ${canonicalRequestedRoot}`
+        );
+      }
+
+      const targetConfig = loadConfigFile(targetConfigPath);
+      const effectiveRoot = await realpath(targetConfig.workspace.root);
+      assertPathInsideRoot(effectiveRoot, canonicalRequestedRoot);
+
+      return {
+        workspace: createWorkspace(targetConfig),
+        requestedRoot: canonicalRequestedRoot,
+        effectiveRoot
+      };
+    }
+  };
 }
 
 class SafeWorkspace implements WorkspaceReader {
@@ -220,6 +276,13 @@ async function assertInsideWorkspace(absolutePath: string, workspaceRoot: string
   const relative = path.relative(realRoot, resolved);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`Path escapes workspace root: ${absolutePath}`);
+  }
+}
+
+function assertPathInsideRoot(candidate: string, root: string): void {
+  const relative = path.relative(root, candidate);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("Target config workspace.root must stay inside the requested project.");
   }
 }
 

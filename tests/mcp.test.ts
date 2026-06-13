@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
-import { createMcpServer, SERVER_INSTRUCTIONS } from "../src/server.js";
+import { createMcpServer, SERVER_INSTRUCTIONS, SERVER_VERSION } from "../src/server.js";
 import type { ExternalSubagentsApp } from "../src/app.js";
 import type { JobRecord } from "../src/types.js";
 
@@ -16,6 +16,7 @@ describe("MCP server", () => {
 
     expect(SERVER_INSTRUCTIONS).toContain("read-only external model delegates");
     expect(SERVER_INSTRUCTIONS).toContain("Tool selection guide");
+    expect(SERVER_VERSION).toBe("0.2.0");
     expect(tools.tools.map(tool => tool.name).sort()).toEqual(
       [
         "delegate_analyze_log",
@@ -31,6 +32,15 @@ describe("MCP server", () => {
       ].sort()
     );
     expect(tools.tools.every(tool => tool.annotations?.readOnlyHint === true)).toBe(true);
+    for (const name of [
+      "delegate_summarize_paths",
+      "delegate_review_diff",
+      "delegate_find_relevant_files",
+      "delegate_analyze_log"
+    ]) {
+      const tool = tools.tools.find(candidate => candidate.name === name);
+      expect(tool?.inputSchema.properties).toHaveProperty("workspace_root");
+    }
 
     await client.close();
     await server.close();
@@ -45,7 +55,9 @@ describe("MCP server", () => {
       provider: "mimo",
       state: "completed",
       createdAt: "2026-06-08T00:00:00.000Z",
-      cacheHit: false
+      cacheHit: false,
+      externalApiCalled: true,
+      usage: { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 }
     };
     const server = createMcpServer({
       wait: async () => [job]
@@ -63,6 +75,8 @@ describe("MCP server", () => {
     // Verify the compact summary layer is present for JobRecord objects
     expect(text).toContain("[completed]");
     expect(text).toContain("analyze_log(log_analyst)");
+    expect(text).toContain("api=called");
+    expect(text).toContain("usage=1500 tokens");
 
     await client.close();
     await server.close();

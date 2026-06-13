@@ -300,8 +300,13 @@ export function loadConfig(cwd = process.cwd(), env = process.env): NormalizedCo
       "No external-subagents-mcp config found. Set EXTERNAL_SUBAGENTS_CONFIG, add .external-subagents-mcp.json, or create ~/.config/external-subagents-mcp/config.json."
     );
   }
-  const raw = JSON.parse(readFileSync(configPath, "utf8"));
-  return normalizeConfig(raw, path.dirname(configPath), configPath);
+  return loadConfigFile(configPath);
+}
+
+export function loadConfigFile(configPath: string): NormalizedConfig {
+  const absoluteConfigPath = path.resolve(configPath);
+  const raw = JSON.parse(readFileSync(absoluteConfigPath, "utf8"));
+  return normalizeConfig(raw, path.dirname(absoluteConfigPath), absoluteConfigPath);
 }
 
 export function findConfigPath(cwd = process.cwd(), env = process.env): string | undefined {
