@@ -12,6 +12,24 @@ The format follows a simplified [Keep a Changelog](https://keepachangelog.com/) 
 
 ---
 
+## v0.2.0 — 2026-06-13
+
+### feat: explicitly authorized cross-project path delegation
+
+All four read-heavy task tools now accept an optional absolute `workspace_root`. When supplied, the target directory must directly contain `.external-subagents-mcp.json`; the target config contributes only its workspace allow/deny and size policy. Providers, API keys, routing, concurrency, diagnostics, and cache remain controlled by the running MCP server. Target configs whose `workspace.root` escapes the requested project are rejected.
+
+This lets Codex delegate files from its current project by path even when the MCP server was started with a different default config. Large source files no longer need to be copied into `diff_text` merely to cross that boundary.
+
+### feat: expose provider usage and external-call state
+
+OpenAI-compatible `usage.prompt_tokens`, `usage.completion_tokens`, and `usage.total_tokens` fields are normalized when providers return valid non-negative integers. Job records now expose the effective workspace root, input bytes, whether the current request called an external API, and optional provider usage.
+
+Cache-hit jobs report `externalApiCalled: false` while preserving the original run's historical usage. Invalid or absent provider usage is left undefined instead of being estimated as exact token counts. Compact MCP summaries now make API-call and total-token state visible.
+
+### docs: steer Codex toward path-based delegation
+
+Server instructions, task descriptions, and README guidance now tell Codex to prefer paths plus `workspace_root` over embedding large file or log bodies, and document the target-project authorization boundary.
+
 ## v0.1.2 — 2026-06-09
 
 ### security: selective merge of external security review findings

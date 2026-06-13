@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
-import { createMcpServer, SERVER_INSTRUCTIONS } from "../src/server.js";
+import { createMcpServer, SERVER_INSTRUCTIONS, SERVER_VERSION } from "../src/server.js";
 import type { ExternalSubagentsApp } from "../src/app.js";
 import type { JobRecord } from "../src/types.js";
 
@@ -16,6 +16,7 @@ describe("MCP server", () => {
 
     expect(SERVER_INSTRUCTIONS).toContain("read-only external model delegates");
     expect(SERVER_INSTRUCTIONS).toContain("Tool selection guide");
+    expect(SERVER_VERSION).toBe("0.2.0");
     expect(tools.tools.map(tool => tool.name).sort()).toEqual(
       [
         "delegate_analyze_log",

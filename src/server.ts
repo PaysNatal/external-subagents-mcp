@@ -8,6 +8,8 @@ export const SERVER_INSTRUCTIONS = `external-subagents-mcp: read-only external m
 
 All task tools (summarize, review, find_files, analyze_log) return a job record. Use delegate_wait then delegate_result to retrieve the structured report. Do not use these tools for implementation, patching, shell commands, migrations, formatting, or test execution.
 
+Prefer path-based delegation so large source files do not enter Codex context. When the project to read is not the server's default workspace, pass its absolute root as workspace_root; that root must directly contain .external-subagents-mcp.json. Use diff_text or log_text only when path-based input is unavailable.
+
 The external model output is advisory. Codex must verify cited files and line numbers before changing code.
 
 Use delegate_provider_status and delegate_provider_smoke to check API keys, routing, and model connectivity before delegating expensive work.
@@ -20,7 +22,11 @@ Tool selection guide:
 
 These tools must not serve as implementers.
 
+Job records expose externalApiCalled, inputBytes, and provider usage when available. A cache hit reports externalApiCalled=false because the current request did not call the provider; any attached usage is historical usage from the original cached run.
+
 When compacting context, preserve the plain-text summary line above the JSON separator (---). It contains the status, summary, severity ranking, and evidence paths. The nested JSON below the separator may be compressed, but the summary line must be kept intact because it holds the key conclusions and file references Codex needs for verification.`;
+
+export const SERVER_VERSION = "0.2.0";
 
 const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_write").describe("Cache behavior: read_write (default — cache and reuse), read_only (reuse but don't write new entries), skip (no cache)");
 const workspaceRoot = z
@@ -33,7 +39,7 @@ const workspaceRoot = z
 
 export function createMcpServer(app: ExternalSubagentsApp): McpServer {
   const server = new McpServer(
-    { name: "external-subagents-mcp", version: "0.1.2" },
+    { name: "external-subagents-mcp", version: SERVER_VERSION },
     { instructions: SERVER_INSTRUCTIONS }
   );
 
@@ -69,7 +75,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Summarize workspace files",
       description:
-        "Read and summarize the specified files. Use to compress, digest, or condense file content for Codex context when reviewing large codebases or understanding unfamiliar projects.",
+        "Read and summarize specified files without placing their full content in Codex context. Prefer paths plus workspace_root for large or cross-project codebases.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
         workspace_root: workspaceRoot,
@@ -87,7 +93,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Review code diff",
       description:
-        "Review a code diff for correctness, security, missing tests, regressions, and maintainability. Supply diff_text directly; this server does not run git commands. Optionally include paths for surrounding file context.",
+        "Review code for correctness, security, missing tests, regressions, and maintainability. Prefer paths plus workspace_root when reviewing complete files; use diff_text only when a diff is the necessary input.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
         workspace_root: workspaceRoot,
@@ -108,7 +114,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Search for relevant files",
       description:
-        "Search, locate, or discover files in the workspace relevant to a query. The external model ranks candidate files by relevance. Use to find which files to read or review before diving into a large unfamiliar project.",
+        "Search, locate, or discover relevant files in an authorized workspace. Pass workspace_root for a project other than the server default.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
         workspace_root: workspaceRoot,
@@ -128,7 +134,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Debug and analyze logs",
       description:
-        "Debug, analyze, or troubleshoot log output. Identifies likely root causes, stack traces, and failure patterns. Supply log_text directly or log_path to read an allowed workspace log file.",
+        "Debug, analyze, or troubleshoot logs. Prefer log_path plus workspace_root when the log is in an authorized project; use log_text when no readable path is available.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
         workspace_root: workspaceRoot,
