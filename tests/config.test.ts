@@ -1,5 +1,8 @@
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { normalizeConfig } from "../src/config.js";
+import { loadConfigFile, normalizeConfig } from "../src/config.js";
 
 describe("normalizeConfig", () => {
   it("rejects provider API keys embedded in config", () => {
@@ -199,5 +202,30 @@ describe("normalizeConfig", () => {
     );
 
     expect(config.providers.minimax.chat_completions_path).toBe("text/chatcompletion_v2");
+  });
+
+  it("loads a specific config file without upward discovery", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "external-subagents-direct-config-"));
+    const configPath = path.join(root, ".external-subagents-mcp.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        workspace: { allow: ["approved/**"] },
+        providers: {
+          local: {
+            base_url: "https://example.test/v1",
+            api_key_env: "EXAMPLE_API_KEY",
+            model: "example-model"
+          }
+        },
+        roles: { summarizer: "local" }
+      })
+    );
+
+    const config = loadConfigFile(configPath);
+
+    expect(config.configPath).toBe(configPath);
+    expect(config.workspace.root).toBe(root);
+    expect(config.workspace.allow).toEqual(["approved/**"]);
   });
 });

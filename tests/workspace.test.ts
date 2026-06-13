@@ -1,8 +1,8 @@
-import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createWorkspace } from "../src/workspace.js";
+import { createWorkspace, createWorkspaceResolver } from "../src/workspace.js";
 import { normalizeConfig } from "../src/config.js";
 
 async function makeWorkspace() {
@@ -16,6 +16,20 @@ async function makeWorkspace() {
   await writeFile(path.join(outside, "secret.txt"), "outside\n");
   await symlink(path.join(outside, "secret.txt"), path.join(root, "src/outside-link.txt"));
   return root;
+}
+
+function configJson(workspace: Record<string, unknown> = { allow: ["src/**"] }) {
+  return JSON.stringify({
+    workspace,
+    providers: {
+      local: {
+        base_url: "https://example.test/v1",
+        api_key_env: "EXAMPLE_API_KEY",
+        model: "example-model"
+      }
+    },
+    roles: { summarizer: "local" }
+  });
 }
 
 describe("workspace access", () => {
@@ -62,5 +76,42 @@ describe("workspace access", () => {
     const workspace = createWorkspace(config);
 
     await expect(workspace.readAllowedFile("src/outside-link.txt")).rejects.toThrow(/escapes workspace/);
+  });
+
+  it("resolves a second workspace only when it has a direct authorization config", async () => {
+    const defaultRoot = await makeWorkspace();
+    const secondRoot = await makeWorkspace();
+    await writeFile(path.join(secondRoot, "src/app.ts"), "export const other = 7;\n");
+    await writeFile(path.join(secondRoot, ".external-subagents-mcp.json"), configJson());
+    const defaultConfig = normalizeConfig(JSON.parse(configJson()), defaultRoot);
+    const resolver = createWorkspaceResolver(defaultConfig);
+
+    const resolved = await resolver.resolve(secondRoot);
+
+    expect(resolved.requestedRoot).toBe(await realpath(secondRoot));
+    expect(resolved.effectiveRoot).toBe(await realpath(secondRoot));
+    expect((await resolved.workspace.readAllowedFile("src/app.ts")).text).toContain("other");
+  });
+
+  it("rejects relative roots and roots without a direct authorization config", async () => {
+    const defaultRoot = await makeWorkspace();
+    const unauthorizedRoot = await makeWorkspace();
+    const resolver = createWorkspaceResolver(normalizeConfig(JSON.parse(configJson()), defaultRoot));
+
+    await expect(resolver.resolve("../other-project")).rejects.toThrow(/absolute/);
+    await expect(resolver.resolve(unauthorizedRoot)).rejects.toThrow(/directly contain.*external-subagents-mcp/i);
+  });
+
+  it("rejects target configs whose workspace root escapes the requested project", async () => {
+    const defaultRoot = await makeWorkspace();
+    const requestedRoot = await makeWorkspace();
+    const outside = await makeWorkspace();
+    await writeFile(
+      path.join(requestedRoot, ".external-subagents-mcp.json"),
+      configJson({ root: outside, allow: ["src/**"] })
+    );
+    const resolver = createWorkspaceResolver(normalizeConfig(JSON.parse(configJson()), defaultRoot));
+
+    await expect(resolver.resolve(requestedRoot)).rejects.toThrow(/workspace\.root.*inside the requested project/i);
   });
 });
