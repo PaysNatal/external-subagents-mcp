@@ -1,5 +1,14 @@
 import { failedReport, parseDelegateReportResult } from "./report.js";
-import type { ProviderClient, ProviderRunRequest, ProviderRunResult, ProviderUsage } from "./types.js";
+import type {
+  ProviderClient,
+  ProviderConversationMessage,
+  ProviderRunRequest,
+  ProviderRunResult,
+  ProviderToolCall,
+  ProviderToolTurnRequest,
+  ProviderToolTurnResult,
+  ProviderUsage
+} from "./types.js";
 
 export interface ProviderOptions {
   name: string;
@@ -15,7 +24,10 @@ interface ChatCompletionsResponse {
   choices?: Array<{
     finish_reason?: unknown;
     message?: {
+      role?: unknown;
       content?: string | null;
+      tool_calls?: unknown;
+      [key: string]: unknown;
     };
   }>;
   usage?: {
@@ -92,6 +104,81 @@ export class OpenAICompatibleProvider implements ProviderClient {
       clearTimeout(timeout);
     }
   }
+
+  async runToolTurn(request: ProviderToolTurnRequest): Promise<ProviderToolTurnResult> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(new Error("Provider request timed out.")), this.timeoutMs);
+    const signal = request.signal ? AbortSignal.any([request.signal, controller.signal]) : controller.signal;
+
+    try {
+      const response = await this.fetchImpl(new URL(this.chatCompletionsUrl), {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${this.options.apiKey}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model: this.options.model,
+          messages: request.messages,
+          tools: request.tools,
+          tool_choice: "auto",
+          temperature: 0.1,
+          max_tokens: request.maxOutputTokens
+        }),
+        signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`Provider ${this.name} returned HTTP ${response.status}: ${await safeBody(response)}`);
+      }
+
+      const data = (await response.json()) as ChatCompletionsResponse;
+      const rawMessage = data.choices?.[0]?.message;
+      if (!rawMessage) {
+        throw new Error(`Provider ${this.name} returned no assistant message.`);
+      }
+      const assistantMessage = normalizeAssistantMessage(rawMessage);
+      const text = typeof rawMessage.content === "string" ? rawMessage.content : undefined;
+      const finishReason = typeof data.choices?.[0]?.finish_reason === "string" ? data.choices[0].finish_reason : undefined;
+
+      return {
+        assistantMessage,
+        text,
+        toolCalls: normalizeToolCalls(rawMessage.tool_calls),
+        usage: normalizeUsage(data.usage),
+        finishReason
+      };
+    } catch (error) {
+      throw new Error(`Provider ${this.name} tool turn failed: ${error instanceof Error ? error.message : String(error)}`, {
+        cause: error
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+function normalizeAssistantMessage(raw: NonNullable<NonNullable<ChatCompletionsResponse["choices"]>[number]["message"]>): ProviderConversationMessage {
+  return {
+    ...raw,
+    role: "assistant",
+    content: typeof raw.content === "string" || raw.content === null ? raw.content : null
+  };
+}
+
+function normalizeToolCalls(raw: unknown): ProviderToolCall[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.flatMap(value => {
+    if (!isRecord(value) || !isRecord(value.function)) {
+      return [];
+    }
+    const id = typeof value.id === "string" ? value.id : undefined;
+    const name = typeof value.function.name === "string" ? value.function.name : undefined;
+    const args = typeof value.function.arguments === "string" ? value.function.arguments : undefined;
+    return id && name && args !== undefined ? [{ id, name, arguments: args }] : [];
+  });
 }
 
 function normalizeUsage(raw: ChatCompletionsResponse["usage"]): ProviderUsage | undefined {
@@ -141,4 +228,8 @@ async function safeBody(response: Response): Promise<string> {
   } catch {
     return "";
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

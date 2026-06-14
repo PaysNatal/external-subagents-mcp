@@ -2,6 +2,126 @@ import { describe, expect, it, vi } from "vitest";
 import { OpenAICompatibleProvider } from "../src/provider.js";
 
 describe("OpenAICompatibleProvider", () => {
+  it("normalizes OpenAI-compatible tool-calling turns", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{
+            finish_reason: "tool_calls",
+            message: {
+              role: "assistant",
+              content: null,
+              reasoning_content: "Need to inspect the file.",
+              tool_calls: [{
+                id: "call_1",
+                type: "function",
+                function: {
+                  name: "read_file",
+                  arguments: '{"path":"src/auth.ts"}'
+                }
+              }]
+            }
+          }],
+          usage: { prompt_tokens: 90, completion_tokens: 30, total_tokens: 120 }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    const provider = new OpenAICompatibleProvider({
+      name: "local",
+      baseUrl: "https://example.test/v1",
+      apiKey: "secret",
+      model: "example",
+      fetch: fetchMock
+    });
+
+    const result = await provider.runToolTurn({
+      messages: [{ role: "user", content: "Find auth flow" }],
+      tools: [{
+        type: "function",
+        function: {
+          name: "read_file",
+          description: "Read one file",
+          parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] }
+        }
+      }],
+      maxOutputTokens: 1000
+    });
+
+    expect(result.toolCalls).toEqual([{
+      id: "call_1",
+      name: "read_file",
+      arguments: '{"path":"src/auth.ts"}'
+    }]);
+    expect(result.assistantMessage).toMatchObject({ role: "assistant", reasoning_content: "Need to inspect the file." });
+    expect(result.finishReason).toBe("tool_calls");
+    expect(result.usage?.totalTokens).toBe(120);
+  });
+
+  it("normalizes a final text tool-loop turn without tool calls", async () => {
+    const provider = new OpenAICompatibleProvider({
+      name: "local",
+      baseUrl: "https://example.test/v1",
+      apiKey: "secret",
+      model: "example",
+      fetch: vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            choices: [{
+              finish_reason: "stop",
+              message: { role: "assistant", content: '{"status":"DONE","summary":"Found it"}' }
+            }]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    });
+
+    const result = await provider.runToolTurn({
+      messages: [{ role: "user", content: "Find auth flow" }],
+      tools: [],
+      maxOutputTokens: 1000
+    });
+
+    expect(result.text).toContain("Found it");
+    expect(result.toolCalls).toEqual([]);
+    expect(result.finishReason).toBe("stop");
+  });
+
+  it("preserves malformed tool arguments for explorer validation", async () => {
+    const provider = new OpenAICompatibleProvider({
+      name: "local",
+      baseUrl: "https://example.test/v1",
+      apiKey: "secret",
+      model: "example",
+      fetch: vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            choices: [{
+              message: {
+                role: "assistant",
+                tool_calls: [{
+                  id: "bad",
+                  type: "function",
+                  function: { name: "read_file", arguments: "{bad" }
+                }]
+              }
+            }]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    });
+
+    const result = await provider.runToolTurn({
+      messages: [{ role: "user", content: "Read" }],
+      tools: [],
+      maxOutputTokens: 1000
+    });
+
+    expect(result.toolCalls[0]?.arguments).toBe("{bad");
+  });
+
   it("normalizes JSON reports from chat completions", async () => {
     const fetchMock = vi.fn(async () =>
       new Response(

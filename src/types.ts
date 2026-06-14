@@ -58,9 +58,48 @@ export interface ProviderRunResult {
   recovery?: ReportRecovery;
 }
 
+export interface ProviderConversationMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content?: string | null;
+  tool_call_id?: string;
+  tool_calls?: unknown;
+  [key: string]: unknown;
+}
+
+export interface ProviderToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+export interface ProviderToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export interface ProviderToolTurnRequest {
+  messages: ProviderConversationMessage[];
+  tools: ProviderToolDefinition[];
+  maxOutputTokens: number;
+  signal?: AbortSignal;
+}
+
+export interface ProviderToolTurnResult {
+  assistantMessage: ProviderConversationMessage;
+  text?: string;
+  toolCalls: ProviderToolCall[];
+  usage?: ProviderUsage;
+  finishReason?: string;
+}
+
 export interface ProviderClient {
   name: string;
   runReport(request: ProviderRunRequest): Promise<ProviderRunResult>;
+  runToolTurn?(request: ProviderToolTurnRequest): Promise<ProviderToolTurnResult>;
 }
 
 export interface RoleConfig {
