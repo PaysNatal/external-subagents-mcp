@@ -77,6 +77,7 @@ export class JobManager {
         inputBytes,
         externalApiCalled: false,
         usage: input.cached.usage,
+        recovery: input.cached.recovery,
         prompt: "",
         abortController: new AbortController()
       };
@@ -199,6 +200,7 @@ export class JobManager {
       }
       job.report = report;
       job.usage = result.usage;
+      job.recovery = result.recovery;
       job.state = report.status === "FAILED" ? "failed" : "completed";
       job.error = report.status === "FAILED" ? report.summary : undefined;
       job.completedAt = new Date().toISOString();
@@ -339,7 +341,8 @@ function publicJob(job: QueuedJob | JobRecord): JobRecord {
     workspaceRoot,
     inputBytes,
     externalApiCalled,
-    usage
+    usage,
+    recovery
   } = job;
   return {
     id,
@@ -360,7 +363,8 @@ function publicJob(job: QueuedJob | JobRecord): JobRecord {
     workspaceRoot,
     inputBytes,
     externalApiCalled,
-    usage
+    usage,
+    recovery
   };
 }
 

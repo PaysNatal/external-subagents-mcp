@@ -1,6 +1,6 @@
 {
   "name": "external-subagents-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A read-only MCP server that delegates large-context review and summarization work to OpenAI-compatible external models.",
   "type": "module",
   "bin": {
@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "jsonrepair": "^3.14.0",
     "minimatch": "^10.0.3",
     "zod": "^4.1.13"
   },

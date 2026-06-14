@@ -24,6 +24,13 @@ describe("DiskCache", () => {
       provider: "local",
       report,
       usage: { promptTokens: 700, completionTokens: 100, totalTokens: 800 },
+      recovery: {
+        parseMode: "salvaged",
+        outputTruncated: true,
+        discardedTailBytes: 42,
+        recoveryWarnings: ["Incomplete tail discarded."],
+        reportCompleteness: 0.8
+      },
       createdAt: new Date().toISOString(),
       completedAt: new Date().toISOString(),
       cacheKey: key,
@@ -33,6 +40,7 @@ describe("DiskCache", () => {
     const cached = await cache.get(key);
     expect(cached?.report.summary).toBe("summary");
     expect(cached?.usage?.totalTokens).toBe(800);
+    expect(cached?.recovery).toMatchObject({ parseMode: "salvaged", outputTruncated: true });
     expect(JSON.stringify(cached)).not.toContain("very secret source text");
   });
 });

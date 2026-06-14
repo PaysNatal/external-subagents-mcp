@@ -258,8 +258,11 @@ Job records expose:
 - `inputBytes`: UTF-8 bytes sent to the provider.
 - `externalApiCalled`: whether this request actually contacted an external provider.
 - `usage`: provider-reported prompt, completion, and total token counts when available.
+- `recovery`: how the provider response was parsed, whether it was truncated, discarded tail bytes, warnings, and estimated report completeness.
 
 A cache hit sets `externalApiCalled` to `false`. Attached usage then describes the original cached run, not a new API call. Providers that omit usage remain supported; the server does not invent exact token counts.
+
+Malformed or truncated provider output does not automatically discard the whole job. The server progressively attempts strict parsing, JSON repair, complete-finding salvage, structured text extraction, and finally a bounded `raw_advice` fallback. Recovered reports expose `recovery.parseMode` as `strict`, `repaired`, `salvaged`, `text_fallback`, or `raw_fallback`. A usable recovered report is not automatically retried; Codex decides whether missing context warrants another call.
 
 ## Safety model
 
@@ -538,8 +541,11 @@ Job 记录会显示：
 - `inputBytes`：发送给 provider 的 UTF-8 字节数。
 - `externalApiCalled`：本次请求是否真正调用了外部 provider。
 - `usage`：provider 返回时记录 prompt、completion 和总 token 数。
+- `recovery`：报告的解析方式、是否截断、丢弃的尾部字节数、恢复警告和估算完整度。
 
 缓存命中时 `externalApiCalled` 为 `false`；此时附带的 usage 表示原始缓存任务的历史消耗，不代表本次产生了新调用。provider 不返回 usage 时仍可正常使用，服务器不会伪造精确 token 数。
+
+格式损坏或被截断的 provider 输出不会自动导致整项任务作废。服务器会依次尝试严格解析、JSON 修复、完整 finding 抢救、结构化文本提取，最后保留有长度限制的 `raw_advice`。恢复后的报告会通过 `recovery.parseMode` 标记为 `strict`、`repaired`、`salvaged`、`text_fallback` 或 `raw_fallback`。可用的恢复报告不会自动重试，由 Codex 判断是否需要补充调用。
 
 ## 安全模型
 

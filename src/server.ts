@@ -24,9 +24,11 @@ These tools must not serve as implementers.
 
 Job records expose externalApiCalled, inputBytes, and provider usage when available. A cache hit reports externalApiCalled=false because the current request did not call the provider; any attached usage is historical usage from the original cached run.
 
+Provider output is recovered progressively when possible: strict JSON, repaired JSON, salvaged complete findings, structured text fallback, then bounded raw advice. Inspect job recovery metadata before acting on repaired or truncated reports; do not automatically retry a usable recovered report.
+
 When compacting context, preserve the plain-text summary line above the JSON separator (---). It contains the status, summary, severity ranking, and evidence paths. The nested JSON below the separator may be compressed, but the summary line must be kept intact because it holds the key conclusions and file references Codex needs for verification.`;
 
-export const SERVER_VERSION = "0.2.0";
+export const SERVER_VERSION = "0.2.1";
 
 const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_write").describe("Cache behavior: read_write (default — cache and reuse), read_only (reuse but don't write new entries), skip (no cache)");
 const workspaceRoot = z
@@ -302,5 +304,9 @@ function renderJobSummary(obj: Record<string, unknown>): string {
       : "api=not-called";
   const usage = obj.usage as Record<string, unknown> | undefined;
   const usageSummary = typeof usage?.totalTokens === "number" ? ` usage=${usage.totalTokens} tokens` : "";
-  return `[${state}] ${kind}(${role})${provider ? ` via ${provider}` : ""}${elapsed} ${apiState}${usageSummary}`;
+  const recovery = obj.recovery as Record<string, unknown> | undefined;
+  const recoverySummary = typeof recovery?.parseMode === "string"
+    ? ` parse=${recovery.parseMode}${recovery.outputTruncated === true ? "/truncated" : ""}`
+    : "";
+  return `[${state}] ${kind}(${role})${provider ? ` via ${provider}` : ""}${elapsed} ${apiState}${usageSummary}${recoverySummary}`;
 }

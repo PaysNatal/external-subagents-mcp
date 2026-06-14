@@ -16,7 +16,8 @@ describe("MCP server", () => {
 
     expect(SERVER_INSTRUCTIONS).toContain("read-only external model delegates");
     expect(SERVER_INSTRUCTIONS).toContain("Tool selection guide");
-    expect(SERVER_VERSION).toBe("0.2.0");
+    expect(SERVER_INSTRUCTIONS).toContain("recovery");
+    expect(SERVER_VERSION).toBe("0.2.1");
     expect(tools.tools.map(tool => tool.name).sort()).toEqual(
       [
         "delegate_analyze_log",
@@ -57,7 +58,14 @@ describe("MCP server", () => {
       createdAt: "2026-06-08T00:00:00.000Z",
       cacheHit: false,
       externalApiCalled: true,
-      usage: { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 }
+      usage: { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 },
+      recovery: {
+        parseMode: "salvaged",
+        outputTruncated: true,
+        discardedTailBytes: 42,
+        recoveryWarnings: ["Incomplete tail discarded."],
+        reportCompleteness: 0.8
+      }
     };
     const server = createMcpServer({
       wait: async () => [job]
@@ -77,6 +85,7 @@ describe("MCP server", () => {
     expect(text).toContain("analyze_log(log_analyst)");
     expect(text).toContain("api=called");
     expect(text).toContain("usage=1500 tokens");
+    expect(text).toContain("parse=salvaged/truncated");
 
     await client.close();
     await server.close();

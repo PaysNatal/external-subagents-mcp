@@ -269,7 +269,8 @@ export class ExternalSubagentsApp {
                 completedAt: job.completedAt ?? new Date().toISOString(),
                 cacheKey,
                 inputHash,
-                usage: job.usage
+                usage: job.usage,
+                recovery: job.recovery
               });
             }
           : undefined

@@ -131,7 +131,7 @@ describe("OpenAICompatibleProvider", () => {
       fetch: vi.fn(async () =>
         new Response(
           JSON.stringify({
-            choices: [{ message: { content: "plain text" } }]
+            choices: [{ message: { content: "ok" } }]
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
@@ -147,6 +147,46 @@ describe("OpenAICompatibleProvider", () => {
 
     expect(result.report.status).toBe("FAILED");
     expect(result.report.summary).toMatch(/parse/);
+  });
+
+  it("recovers truncated provider output and exposes finish reason metadata", async () => {
+    const provider = new OpenAICompatibleProvider({
+      name: "local",
+      baseUrl: "https://example.test/v1",
+      apiKey: "secret",
+      model: "example",
+      fetch: vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            choices: [{
+              finish_reason: "length",
+              message: {
+                content:
+                  '{"status":"DONE_WITH_CONCERNS","summary":"One complete issue","findings":[' +
+                  '{"severity":"high","title":"Complete","description":"Useful","recommendation":"Verify","confidence":0.9},' +
+                  '{"severity":"low","title":"Cut'
+              }
+            }],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    });
+
+    const result = await provider.runReport({
+      role: "reviewer",
+      system: "Return JSON.",
+      user: "Review this.",
+      maxOutputTokens: 50
+    });
+
+    expect(result.report.status).toBe("DONE_WITH_CONCERNS");
+    expect(result.report.findings[0]?.title).toBe("Complete");
+    expect(result.recovery).toMatchObject({
+      parseMode: "salvaged",
+      outputTruncated: true
+    });
   });
 
   it("normalizes token usage returned by OpenAI-compatible providers", async () => {

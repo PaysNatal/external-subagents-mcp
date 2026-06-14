@@ -25,6 +25,17 @@ export interface DelegateReport {
   findings: DelegateFinding[];
   next_actions: string[];
   omitted: string[];
+  raw_advice?: string;
+}
+
+export type ReportParseMode = "strict" | "repaired" | "salvaged" | "text_fallback" | "raw_fallback";
+
+export interface ReportRecovery {
+  parseMode: ReportParseMode;
+  outputTruncated: boolean;
+  discardedTailBytes: number;
+  recoveryWarnings: string[];
+  reportCompleteness: number;
 }
 
 export interface ProviderRunRequest {
@@ -44,6 +55,7 @@ export interface ProviderUsage {
 export interface ProviderRunResult {
   report: DelegateReport;
   usage?: ProviderUsage;
+  recovery?: ReportRecovery;
 }
 
 export interface ProviderClient {
@@ -107,6 +119,7 @@ export interface JobRecord {
   inputBytes?: number;
   externalApiCalled: boolean;
   usage?: ProviderUsage;
+  recovery?: ReportRecovery;
 }
 
 export interface CachedJobResult {
@@ -119,4 +132,5 @@ export interface CachedJobResult {
   cacheKey: string;
   inputHash: string;
   usage?: ProviderUsage;
+  recovery?: ReportRecovery;
 }

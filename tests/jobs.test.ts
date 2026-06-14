@@ -15,7 +15,14 @@ describe("JobManager", () => {
       name: "local",
       runReport: vi.fn(async () => ({
         report,
-        usage: { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 }
+        usage: { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 },
+        recovery: {
+          parseMode: "repaired",
+          outputTruncated: false,
+          discardedTailBytes: 0,
+          recoveryWarnings: ["Repaired provider JSON syntax."],
+          reportCompleteness: 0.95
+        }
       }))
     };
     const manager = new JobManager({
@@ -40,7 +47,12 @@ describe("JobManager", () => {
       workspaceRoot: "/repo",
       inputBytes: 11,
       externalApiCalled: true,
-      usage: { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 }
+      usage: { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 },
+      recovery: {
+        parseMode: "repaired",
+        outputTruncated: false,
+        reportCompleteness: 0.95
+      }
     });
   });
 
@@ -242,6 +254,13 @@ describe("JobManager", () => {
         provider: "local",
         report,
         usage: { promptTokens: 800, completionTokens: 200, totalTokens: 1000 },
+        recovery: {
+          parseMode: "repaired",
+          outputTruncated: false,
+          discardedTailBytes: 0,
+          recoveryWarnings: ["Repaired syntax."],
+          reportCompleteness: 0.95
+        },
         createdAt: "2026-06-13T00:00:00.000Z",
         completedAt: "2026-06-13T00:01:00.000Z",
         cacheKey: "cached",
@@ -255,7 +274,8 @@ describe("JobManager", () => {
       inputBytes: 11,
       workspaceRoot: "/repo",
       externalApiCalled: false,
-      usage: { promptTokens: 800, completionTokens: 200, totalTokens: 1000 }
+      usage: { promptTokens: 800, completionTokens: 200, totalTokens: 1000 },
+      recovery: { parseMode: "repaired", outputTruncated: false }
     });
   });
 

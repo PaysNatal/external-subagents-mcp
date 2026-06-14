@@ -1,4 +1,4 @@
-import { failedReport, parseDelegateReport } from "./report.js";
+import { failedReport, parseDelegateReportResult } from "./report.js";
 import type { ProviderClient, ProviderRunRequest, ProviderRunResult, ProviderUsage } from "./types.js";
 
 export interface ProviderOptions {
@@ -13,6 +13,7 @@ export interface ProviderOptions {
 
 interface ChatCompletionsResponse {
   choices?: Array<{
+    finish_reason?: unknown;
     message?: {
       content?: string | null;
     };
@@ -67,12 +68,14 @@ export class OpenAICompatibleProvider implements ProviderClient {
 
       const data = (await response.json()) as ChatCompletionsResponse;
       const content = data.choices?.[0]?.message?.content;
+      const finishReason = data.choices?.[0]?.finish_reason;
       if (!content) {
         return { report: failedReport(`Provider ${this.name} returned no message content.`), usage: normalizeUsage(data.usage) };
       }
 
       try {
-        return { report: parseDelegateReport(content), usage: normalizeUsage(data.usage) };
+        const parsed = parseDelegateReportResult(content, { outputTruncated: finishReason === "length" || finishReason === "max_tokens" });
+        return { ...parsed, usage: normalizeUsage(data.usage) };
       } catch (error) {
         return {
           report: failedReport(
