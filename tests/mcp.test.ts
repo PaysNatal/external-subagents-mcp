@@ -16,6 +16,8 @@ describe("MCP server", () => {
 
     expect(SERVER_INSTRUCTIONS).toContain("read-only external model delegates");
     expect(SERVER_INSTRUCTIONS).toContain("Tool selection guide");
+    expect(SERVER_INSTRUCTIONS).toMatch(/before large source reads/i);
+    expect(SERVER_INSTRUCTIONS).toContain("Codex remains");
     expect(SERVER_INSTRUCTIONS).toContain("recovery");
     expect(SERVER_VERSION).toBe("0.2.1");
     expect(tools.tools.map(tool => tool.name).sort()).toEqual(

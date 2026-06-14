@@ -8,6 +8,8 @@ export const SERVER_INSTRUCTIONS = `external-subagents-mcp: read-only external m
 
 All task tools (summarize, review, find_files, analyze_log) return a job record. Use delegate_wait then delegate_result to retrieve the structured report. Do not use these tools for implementation, patching, shell commands, migrations, formatting, or test execution.
 
+Codex remains the primary owner for understanding, planning, decisions, edits, commands, verification, and acceptance. Before large source reads, content searches, or log ingestion, Codex should perform an early delegation check and delegate only bounded read-heavy labor that it can independently verify.
+
 Prefer path-based delegation so large source files do not enter Codex context. When the project to read is not the server's default workspace, pass its absolute root as workspace_root; that root must directly contain .external-subagents-mcp.json. Use diff_text or log_text only when path-based input is unavailable.
 
 The external model output is advisory. Codex must verify cited files and line numbers before changing code.

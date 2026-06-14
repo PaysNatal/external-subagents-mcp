@@ -6,6 +6,14 @@ A read-only MCP server that lets Codex delegate large-context review, summarizat
 
 Codex remains responsible for file edits, shell commands, patches, approvals, and final judgment. External models return advisory reports only.
 
+To teach Codex when to delegate before it reads large amounts of source, install the maintained delegation guidance:
+
+```bash
+external-subagents-mcp install-codex-instructions
+```
+
+This safely adds or updates a marked block in `~/.codex/instructions.md` while preserving unrelated user instructions. Preview it with `external-subagents-mcp codex-instructions`, or use `--dry-run` before installation.
+
 ## Quick start
 
 ### 1. Install
@@ -288,6 +296,14 @@ MIT
 一个只读 MCP 服务器，让 Codex 将大上下文的代码审查、摘要、文件定位和日志分析委托给外部 OpenAI-compatible 模型。
 
 Codex 始终负责文件编辑、shell、补丁、审批和最终判断。外部模型只返回顾问性质的报告。
+
+要让 Codex 在大量读取源码前主动检查是否适合委托，请安装项目维护的委托规则：
+
+```bash
+external-subagents-mcp install-codex-instructions
+```
+
+该命令会在保留其他用户规则的前提下，安全新增或更新 `~/.codex/instructions.md` 中的受管区块。可以先运行 `external-subagents-mcp codex-instructions` 查看内容，或使用 `--dry-run` 预览安装结果。
 
 ## 快速开始
 

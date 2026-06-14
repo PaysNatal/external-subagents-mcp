@@ -99,4 +99,24 @@ describe("runCli", () => {
       })
     ]);
   });
+
+  it("prints and installs Codex delegation instructions", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "external-subagents-codex-cli-"));
+    const target = path.join(root, "instructions.md");
+    let printed = "";
+
+    expect(await runCli(["codex-instructions"], { stdout: text => { printed += text; } })).toBe(0);
+    expect(printed).toContain("Codex remains the primary owner");
+
+    let installed = "";
+    const code = await runCli(["install-codex-instructions", "--target", target], {
+      stdout: text => { installed += text; }
+    });
+
+    expect(code).toBe(0);
+    expect(installed).toContain("Installed");
+    expect(await readFile(target, "utf8")).toContain("early delegation check");
+    expect(isCliCommand(["codex-instructions"])).toBe(true);
+    expect(isCliCommand(["install-codex-instructions"])).toBe(true);
+  });
 });

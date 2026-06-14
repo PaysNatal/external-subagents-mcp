@@ -3,6 +3,7 @@ import { copyFile } from "node:fs/promises";
 import path from "node:path";
 import { buildProviderStatusReport, smokeProvider } from "./diagnostics.js";
 import { loadConfig } from "./config.js";
+import { installCodexInstructions, renderCodexInstructions } from "./codex-instructions.js";
 
 export interface CliOptions {
   cwd?: string;
@@ -14,7 +15,8 @@ export interface CliOptions {
 
 export function isCliCommand(args: string[]): boolean {
   const command = args[0];
-  return command === "init" || command === "doctor" || command === "smoke" || command === "help" || command === "--help" || command === "-h";
+  return command === "init" || command === "doctor" || command === "smoke" || command === "codex-instructions" ||
+    command === "install-codex-instructions" || command === "help" || command === "--help" || command === "-h";
 }
 
 export async function runCli(args: string[], options: CliOptions = {}): Promise<number> {
@@ -61,6 +63,23 @@ export async function runCli(args: string[], options: CliOptions = {}): Promise<
       const report = await smokeProvider(loadConfig(cwd, env), env, { provider, fetch: options.fetch });
       stdout(json ? `${JSON.stringify(report, null, 2)}\n` : formatProviderSmokeReport(report));
       return report.ok ? 0 : 1;
+    }
+
+    if (command === "codex-instructions") {
+      stdout(`${renderCodexInstructions()}\n`);
+      return 0;
+    }
+
+    if (command === "install-codex-instructions") {
+      const result = await installCodexInstructions({
+        target: readOption(args, "--target"),
+        dryRun: args.includes("--dry-run")
+      });
+      const action = result.dryRun
+        ? result.changed ? "Would install" : "Already current"
+        : result.changed ? "Installed" : "Already current";
+      stdout(`${action} Codex delegation instructions: ${result.target}\n`);
+      return 0;
     }
 
     stdout(usage());
@@ -112,6 +131,8 @@ function usage(): string {
     "  external-subagents-mcp init",
     "  external-subagents-mcp doctor [--json]",
     "  external-subagents-mcp smoke --provider <name> [--json]",
+    "  external-subagents-mcp codex-instructions",
+    "  external-subagents-mcp install-codex-instructions [--dry-run] [--target <path>]",
     "  external-subagents-mcp",
     "",
     "Without a CLI command, the package starts the stdio MCP server."
