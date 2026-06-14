@@ -10,10 +10,18 @@ export interface WorkspaceDocument {
   bytes: number;
 }
 
+export interface WorkspaceSearchMatch {
+  path: string;
+  line: number;
+  preview: string;
+}
+
 export interface WorkspaceReader {
   readAllowedFile(relativePath: string): Promise<WorkspaceDocument>;
   readAllowedFiles(relativePaths: string[]): Promise<{ documents: WorkspaceDocument[]; omitted: string[] }>;
+  readAllowedFileRange(relativePath: string, lineStart: number, lineEnd: number): Promise<WorkspaceDocument>;
   listAllowedFiles(globs?: string[], maxResults?: number): Promise<string[]>;
+  searchAllowedText(query: string, globs?: string[], maxMatches?: number): Promise<WorkspaceSearchMatch[]>;
 }
 
 export interface ResolvedWorkspace {
@@ -168,6 +176,46 @@ class SafeWorkspace implements WorkspaceReader {
       }
     });
     return results;
+  }
+
+  async readAllowedFileRange(relativePath: string, lineStart: number, lineEnd: number): Promise<WorkspaceDocument> {
+    if (!Number.isInteger(lineStart) || !Number.isInteger(lineEnd) || lineStart < 1 || lineEnd < lineStart) {
+      throw new Error("Line range must use positive integers with line_end greater than or equal to line_start.");
+    }
+    const document = await this.readAllowedFile(relativePath);
+    const text = document.text.split(/\r?\n/).slice(lineStart - 1, lineEnd).join("\n");
+    return {
+      ...document,
+      text,
+      bytes: Buffer.byteLength(text, "utf8")
+    };
+  }
+
+  async searchAllowedText(query: string, globs: string[] = ["**/*"], maxMatches = 100): Promise<WorkspaceSearchMatch[]> {
+    if (!query) {
+      throw new Error("Search query must not be empty.");
+    }
+    const matches: WorkspaceSearchMatch[] = [];
+    const candidates = await this.listAllowedFiles(globs, Math.max(maxMatches * 10, 200));
+    for (const candidate of candidates) {
+      if (matches.length >= maxMatches) break;
+      try {
+        const document = await this.readAllowedFile(candidate);
+        const lines = document.text.split(/\r?\n/);
+        for (let index = 0; index < lines.length && matches.length < maxMatches; index += 1) {
+          if (lines[index].includes(query)) {
+            matches.push({
+              path: candidate,
+              line: index + 1,
+              preview: lines[index].trim().slice(0, 300)
+            });
+          }
+        }
+      } catch {
+        // Skip unreadable candidates while preserving the bounded search.
+      }
+    }
+    return matches;
   }
 }
 

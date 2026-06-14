@@ -50,7 +50,7 @@ const roleEntrySchema = z.union([
 ]);
 
 const roleMapSchema = z.record(z.string(), roleEntrySchema);
-const jobKindSchema = z.enum(["review_diff", "summarize_paths", "find_relevant_files", "analyze_log"]);
+const jobKindSchema = z.enum(["review_diff", "summarize_paths", "find_relevant_files", "analyze_log", "explore_workspace"]);
 const jobKindsSchema = z.union([jobKindSchema, z.array(jobKindSchema).min(1)]);
 
 const routingRuleSchema = z
@@ -145,7 +145,8 @@ const DEFAULT_ROLE_BUDGETS: Record<string, number> = {
   summarizer: 2000,
   reviewer: 3000,
   log_analyst: 2500,
-  file_finder: 1500
+  file_finder: 1500,
+  explorer: 2500
 };
 
 export function normalizeConfig(raw: unknown, cwd = process.cwd(), configPath?: string): NormalizedConfig {
@@ -168,14 +169,14 @@ export function normalizeConfig(raw: unknown, cwd = process.cwd(), configPath?: 
   const workspaceRoot = path.resolve(cwd, workspace.root ?? ".");
   const cacheDir = path.resolve(workspaceRoot, cache.dir ?? ".external-subagents/cache");
   const profiles = Object.fromEntries(
-    Object.entries(parsed.profiles ?? {}).map(([name, roleMap]) => [name, normalizeRoleMap(roleMap, parsed.providers)])
+    Object.entries(parsed.profiles ?? {}).map(([name, roleMap]) => [name, ensureExplorerRole(normalizeRoleMap(roleMap, parsed.providers))])
   );
   const routing = normalizeRouting(parsed.routing, parsed.providers);
   const selectedRoles =
     routing.profile !== undefined
       ? profiles[routing.profile]
       : parsed.roles
-        ? normalizeRoleMap(parsed.roles, parsed.providers)
+        ? ensureExplorerRole(normalizeRoleMap(parsed.roles, parsed.providers))
         : undefined;
 
   if (!selectedRoles) {
@@ -209,6 +210,14 @@ export function normalizeConfig(raw: unknown, cwd = process.cwd(), configPath?: 
     profiles,
     routing
   };
+}
+
+function ensureExplorerRole(roles: Record<string, RoleConfig>): Record<string, RoleConfig> {
+  if (roles.explorer) {
+    return roles;
+  }
+  const fallback = roles.file_finder ?? roles.summarizer ?? Object.values(roles)[0];
+  return fallback ? { ...roles, explorer: { ...fallback } } : roles;
 }
 
 function normalizeRoleMap(rawRoles: z.infer<typeof roleMapSchema>, providers: Record<string, ProviderConfig>): Record<string, RoleConfig> {

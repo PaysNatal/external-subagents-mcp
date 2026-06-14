@@ -78,6 +78,26 @@ describe("workspace access", () => {
     await expect(workspace.readAllowedFile("src/outside-link.txt")).rejects.toThrow(/escapes workspace/);
   });
 
+  it("supports bounded text search and line-range reads", async () => {
+    const root = await makeWorkspace();
+    await writeFile(path.join(root, "src/second.ts"), "first\nconst answer = 42;\nthird\n");
+    const workspace = createWorkspace(normalizeConfig({
+      workspace: { allow: ["src/**"], deny: ["**/.env*"] },
+      providers: { local: { base_url: "https://example.test/v1", api_key_env: "KEY", model: "local" } },
+      roles: { summarizer: "local" }
+    }, root));
+
+    const matches = await workspace.searchAllowedText("answer", ["src/**/*.ts"], 5);
+    const range = await workspace.readAllowedFileRange("src/second.ts", 2, 2);
+
+    expect(matches).toEqual([
+      expect.objectContaining({ path: "src/app.ts", line: 1 }),
+      expect.objectContaining({ path: "src/second.ts", line: 2 })
+    ]);
+    expect(range.text).toBe("const answer = 42;");
+    expect(range.bytes).toBeGreaterThan(0);
+  });
+
   it("resolves a second workspace only when it has a direct authorization config", async () => {
     const defaultRoot = await makeWorkspace();
     const secondRoot = await makeWorkspace();

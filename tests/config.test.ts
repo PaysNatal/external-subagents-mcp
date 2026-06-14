@@ -48,6 +48,22 @@ describe("normalizeConfig", () => {
     expect(config.cache.dir).toBe("/repo/.external-subagents/cache");
     expect(config.concurrency.global).toBe(3);
     expect(config.roles.summarizer.maxOutputTokens).toBe(2000);
+    expect(config.roles.explorer).toEqual(config.roles.summarizer);
+  });
+
+  it("prefers file_finder when deriving a missing explorer role", () => {
+    const config = normalizeConfig({
+      providers: {
+        summary: { base_url: "https://example.test/v1", api_key_env: "SUMMARY_KEY", model: "summary" },
+        finder: { base_url: "https://example.test/v1", api_key_env: "FINDER_KEY", model: "finder" }
+      },
+      roles: {
+        summarizer: "summary",
+        file_finder: { provider: "finder", max_output_tokens: 1700 }
+      }
+    }, "/repo");
+
+    expect(config.roles.explorer).toEqual({ provider: "finder", maxOutputTokens: 1700 });
   });
 
   it("activates the selected profile and supports provider shorthand role entries", () => {

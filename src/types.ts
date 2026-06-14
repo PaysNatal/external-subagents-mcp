@@ -107,7 +107,16 @@ export interface RoleConfig {
   maxOutputTokens: number;
 }
 
-export type JobKind = "review_diff" | "summarize_paths" | "find_relevant_files" | "analyze_log";
+export type JobKind = "review_diff" | "summarize_paths" | "find_relevant_files" | "analyze_log" | "explore_workspace";
+
+export interface ExplorationTelemetry {
+  turns: number;
+  toolCalls: number;
+  filesRead: number;
+  sourceBytesRead: number;
+  searchMatchesReturned: number;
+  limitsHit: string[];
+}
 
 export type RoutingMode = "profile" | "auto";
 
