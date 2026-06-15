@@ -45,6 +45,7 @@ export interface ExploreWorkspaceResult {
   recovery?: ReportRecovery;
   usage?: ProviderUsage;
   exploration: ExplorationTelemetry;
+  externalApiCalled: boolean;
 }
 
 export class ReadOnlyExplorer {
@@ -65,7 +66,8 @@ export class ReadOnlyExplorer {
     if (!this.provider.runToolTurn) {
       return {
         report: blockedReport(`Provider ${this.provider.name} does not support OpenAI-compatible tool calling.`),
-        exploration: telemetry
+        exploration: telemetry,
+        externalApiCalled: false
       };
     }
 
@@ -84,10 +86,11 @@ export class ReadOnlyExplorer {
     ];
     const readPaths = new Set<string>();
     let usage: ProviderUsage | undefined;
+    let externalApiCalled = false;
 
     for (let turn = 0; turn < limits.maxTurns; turn += 1) {
       if (input.signal?.aborted) {
-        return { report: blockedReport("Workspace exploration was cancelled."), usage, exploration: telemetry };
+        return { report: blockedReport("Workspace exploration was cancelled."), usage, exploration: telemetry, externalApiCalled };
       }
       const result = await this.provider.runToolTurn({
         messages,
@@ -95,19 +98,20 @@ export class ReadOnlyExplorer {
         maxOutputTokens: input.outputBudget,
         signal: input.signal
       });
+      externalApiCalled = true;
       telemetry.turns += 1;
       usage = addUsage(usage, result.usage);
       messages.push(result.assistantMessage);
 
       if (result.toolCalls.length === 0) {
         if (!result.text?.trim()) {
-          return { report: blockedReport("Provider returned neither tool calls nor a final report."), usage, exploration: telemetry };
+          return { report: blockedReport("Provider returned neither tool calls nor a final report."), usage, exploration: telemetry, externalApiCalled };
         }
         const parsed = parseDelegateReportResult(result.text, {
           outputTruncated: result.finishReason === "length" || result.finishReason === "max_tokens"
         });
         parsed.report.omitted = unique([...parsed.report.omitted, ...telemetry.limitsHit.map(limit => `Explorer limit reached: ${limit}`)]);
-        return { ...parsed, usage, exploration: telemetry };
+        return { ...parsed, usage, exploration: telemetry, externalApiCalled };
       }
 
       for (const call of result.toolCalls) {
@@ -121,7 +125,8 @@ export class ReadOnlyExplorer {
     return {
       report: blockedReport("Workspace exploration reached max_turns before producing a final report.", ["Explorer limit reached: max_turns"]),
       usage,
-      exploration: telemetry
+      exploration: telemetry,
+      externalApiCalled
     };
   }
 
@@ -146,7 +151,11 @@ export class ReadOnlyExplorer {
         const args = searchTextSchema.parse(raw);
         const maxMatches = Math.min(args.max_matches ?? limits.maxSearchMatches, limits.maxSearchMatches);
         const candidates = await this.workspace.searchAllowedText(args.query, scopeGlobs, Math.max(maxMatches * 5, maxMatches));
-        const matches = candidates.filter(match => matchesRequestedGlobs(match.path, args.globs)).slice(0, maxMatches);
+        const filtered = candidates.filter(match => matchesRequestedGlobs(match.path, args.globs));
+        if (filtered.length > maxMatches) {
+          recordLimit(telemetry, "max_search_matches");
+        }
+        const matches = filtered.slice(0, maxMatches);
         telemetry.searchMatchesReturned += matches.length;
         return boundedJson({ matches }, limits.maxToolResultBytes);
       }

@@ -56,6 +56,106 @@ describe("JobManager", () => {
     });
   });
 
+  it("runs custom read-only executors and exposes exploration telemetry", async () => {
+    const report: DelegateReport = {
+      status: "DONE",
+      summary: "Authentication flow located.",
+      findings: [],
+      next_actions: [],
+      omitted: []
+    };
+    const provider: ProviderClient = {
+      name: "local",
+      runReport: vi.fn(async () => {
+        throw new Error("runReport should not be used for explorer jobs");
+      })
+    };
+    const manager = new JobManager({
+      providers: new Map([["local", provider]]),
+      roles: new Map([["explorer", { provider: "local", maxOutputTokens: 1000 }]]),
+      globalConcurrency: 1,
+      perProviderConcurrency: 1
+    });
+    const execute = vi.fn(async ({ provider: selectedProvider, maxOutputTokens }: {
+      provider: ProviderClient;
+      signal: AbortSignal;
+      maxOutputTokens: number;
+    }) => {
+      expect(selectedProvider).toBe(provider);
+      expect(maxOutputTokens).toBe(1000);
+      return {
+        report,
+        usage: { promptTokens: 600, completionTokens: 100, totalTokens: 700 },
+        exploration: {
+          turns: 4,
+          toolCalls: 3,
+          filesRead: 1,
+          sourceBytesRead: 1234,
+          searchMatchesReturned: 5,
+          limitsHit: []
+        }
+      };
+    });
+
+    const job = manager.start({
+      kind: "explore_workspace",
+      role: "explorer",
+      prompt: "Find authentication flow",
+      cacheKey: undefined,
+      execute
+    });
+    const [completed] = await manager.wait([job.id], 1000);
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(provider.runReport).not.toHaveBeenCalled();
+    expect(completed).toMatchObject({
+      state: "completed",
+      externalApiCalled: true,
+      exploration: {
+        turns: 4,
+        toolCalls: 3,
+        filesRead: 1,
+        sourceBytesRead: 1234,
+        searchMatchesReturned: 5,
+        limitsHit: []
+      }
+    });
+  });
+
+  it("lets a custom executor report that no external API call was needed", async () => {
+    const report: DelegateReport = {
+      status: "BLOCKED",
+      summary: "Provider does not support tool calling.",
+      findings: [],
+      next_actions: [],
+      omitted: []
+    };
+    const provider: ProviderClient = {
+      name: "local",
+      runReport: vi.fn(async () => ({ report }))
+    };
+    const manager = new JobManager({
+      providers: new Map([["local", provider]]),
+      roles: new Map([["explorer", { provider: "local", maxOutputTokens: 1000 }]]),
+      globalConcurrency: 1,
+      perProviderConcurrency: 1
+    });
+
+    const job = manager.start({
+      kind: "explore_workspace",
+      role: "explorer",
+      prompt: "Find authentication flow",
+      cacheKey: undefined,
+      execute: async () => ({ report, externalApiCalled: false })
+    });
+    const [completed] = await manager.wait([job.id], 1000);
+
+    expect(completed).toMatchObject({
+      state: "completed",
+      externalApiCalled: false
+    });
+  });
+
   it("auto-routes jobs by kind without changing the original prompt", async () => {
     const report: DelegateReport = {
       status: "DONE",
@@ -253,6 +353,14 @@ describe("JobManager", () => {
         role: "reviewer",
         provider: "local",
         report,
+        exploration: {
+          turns: 4,
+          toolCalls: 3,
+          filesRead: 1,
+          sourceBytesRead: 1234,
+          searchMatchesReturned: 5,
+          limitsHit: ["max_files"]
+        },
         usage: { promptTokens: 800, completionTokens: 200, totalTokens: 1000 },
         recovery: {
           parseMode: "repaired",
@@ -274,6 +382,14 @@ describe("JobManager", () => {
       inputBytes: 11,
       workspaceRoot: "/repo",
       externalApiCalled: false,
+      exploration: {
+        turns: 4,
+        toolCalls: 3,
+        filesRead: 1,
+        sourceBytesRead: 1234,
+        searchMatchesReturned: 5,
+        limitsHit: ["max_files"]
+      },
       usage: { promptTokens: 800, completionTokens: 200, totalTokens: 1000 },
       recovery: { parseMode: "repaired", outputTruncated: false }
     });

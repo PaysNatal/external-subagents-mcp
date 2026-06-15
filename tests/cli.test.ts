@@ -95,7 +95,7 @@ describe("runCli", () => {
       expect.objectContaining({
         name: "mimo",
         key_status: "missing",
-        used_by: ["role:summarizer", "role:reviewer", "role:log_analyst", "role:file_finder"]
+        used_by: ["role:summarizer", "role:reviewer", "role:log_analyst", "role:file_finder", "role:explorer"]
       })
     ]);
   });

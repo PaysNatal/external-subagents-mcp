@@ -3,7 +3,8 @@ import { REPORT_CONTRACT } from "./report.js";
 import type { DiskCache } from "./cache.js";
 import type { NormalizedConfig } from "./config.js";
 import type { ProviderSmokeInput, ProviderSmokeReport, ProviderStatusReport } from "./diagnostics.js";
-import type { JobManager } from "./jobs.js";
+import { ReadOnlyExplorer } from "./explorer.js";
+import type { JobExecutor, JobManager } from "./jobs.js";
 import type { JobKind, JobRecord } from "./types.js";
 import type { WorkspaceResolver } from "./workspace.js";
 
@@ -54,6 +55,18 @@ export interface DelegateAnalyzeLogInput {
   log_path?: string;
   log_text?: string;
   focus: string;
+  output_budget?: number;
+  cache_mode?: CacheMode;
+}
+
+export interface DelegateExploreWorkspaceInput {
+  workspace_root?: string;
+  question: string;
+  scope_globs?: string[];
+  focus: string;
+  max_turns?: number;
+  max_files?: number;
+  max_total_bytes?: number;
   output_budget?: number;
   cache_mode?: CacheMode;
 }
@@ -189,6 +202,48 @@ export class ExternalSubagentsApp {
     });
   }
 
+  async delegateExploreWorkspace(input: DelegateExploreWorkspaceInput): Promise<JobRecord> {
+    const resolved = await this.options.workspaceResolver.resolve(input.workspace_root);
+    const prompt = [
+      baseInstructions("explorer", input.output_budget),
+      `Question: ${input.question}`,
+      `Focus: ${input.focus}`,
+      input.scope_globs?.length ? `Scope globs: ${input.scope_globs.join(", ")}` : "Scope globs: authorized workspace",
+      "Use the bounded read-only explorer tools to discover facts and evidence. Codex remains responsible for decisions and implementation."
+    ].join("\n\n");
+    const execute: JobExecutor = async ({ provider, signal, maxOutputTokens }) =>
+      new ReadOnlyExplorer(provider, resolved.workspace).run({
+        question: input.question,
+        focus: input.focus,
+        scopeGlobs: input.scope_globs,
+        maxTurns: input.max_turns,
+        maxFiles: input.max_files,
+        maxTotalBytes: input.max_total_bytes,
+        outputBudget: maxOutputTokens,
+        signal
+      });
+
+    return this.startWithCache({
+      kind: "explore_workspace",
+      role: "explorer",
+      cacheMode: input.cache_mode,
+      inputForCache: {
+        kind: "explore_workspace",
+        question: input.question,
+        scope_globs: input.scope_globs,
+        focus: input.focus,
+        max_turns: input.max_turns,
+        max_files: input.max_files,
+        max_total_bytes: input.max_total_bytes,
+        output_budget: input.output_budget
+      },
+      outputBudget: input.output_budget,
+      workspaceRoot: resolved.effectiveRoot,
+      prompt,
+      execute
+    });
+  }
+
   wait(jobIds: string[], timeoutMs: number): Promise<JobRecord[]> {
     return this.options.jobs.wait(jobIds, timeoutMs);
   }
@@ -227,6 +282,7 @@ export class ExternalSubagentsApp {
     cacheMode?: CacheMode;
     outputBudget?: number;
     workspaceRoot: string;
+    execute?: JobExecutor;
   }): Promise<JobRecord> {
     const cacheMode = input.cacheMode ?? "read_write";
     const inputBytes = Buffer.byteLength(input.prompt, "utf8");
@@ -254,6 +310,7 @@ export class ExternalSubagentsApp {
       inputBytes,
       workspaceRoot: input.workspaceRoot,
       maxOutputTokens: input.outputBudget,
+      execute: input.execute,
       onComplete:
         cacheKey && cacheMode === "read_write"
           ? async job => {
@@ -270,7 +327,8 @@ export class ExternalSubagentsApp {
                 cacheKey,
                 inputHash,
                 usage: job.usage,
-                recovery: job.recovery
+                recovery: job.recovery,
+                exploration: job.exploration
               });
             }
           : undefined

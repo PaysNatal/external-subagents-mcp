@@ -82,6 +82,7 @@ describe("ReadOnlyExplorer", () => {
     });
     expect(result.exploration.sourceBytesRead).toBeGreaterThan(0);
     expect(result.usage?.totalTokens).toBe(75);
+    expect(result.externalApiCalled).toBe(true);
   });
 
   it("blocks denied paths and records hard limits without exposing content", async () => {
@@ -111,6 +112,63 @@ describe("ReadOnlyExplorer", () => {
     expect(JSON.stringify(result)).not.toContain("SECRET=value");
   });
 
+  it("stops before another provider turn when exploration is cancelled", async () => {
+    const controller = new AbortController();
+    const provider = scriptedProvider([
+      {
+        ...toolTurn("1", "list_files", { globs: ["src/**/*.ts"], max_results: 10 }),
+        assistantMessage: {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "1", type: "function", function: { name: "list_files", arguments: '{"globs":["src/**/*.ts"],"max_results":10}' } }]
+        }
+      }
+    ]);
+    const originalTurn = provider.runToolTurn;
+    provider.runToolTurn = vi.fn(async request => {
+      const result = await originalTurn!(request);
+      controller.abort();
+      return result;
+    });
+    const explorer = new ReadOnlyExplorer(provider, await makeExplorerWorkspace());
+
+    const result = await explorer.run({
+      question: "Inspect files",
+      focus: "Facts",
+      outputBudget: 1000,
+      signal: controller.signal
+    });
+
+    expect(result.report.status).toBe("BLOCKED");
+    expect(result.report.summary).toMatch(/cancelled/i);
+    expect(result.exploration.turns).toBe(1);
+    expect(provider.runToolTurn).toHaveBeenCalledOnce();
+    expect(result.externalApiCalled).toBe(true);
+  });
+
+  it("records bounded search truncation in telemetry and the final report", async () => {
+    const provider = scriptedProvider([
+      toolTurn("1", "search_text", { query: "authenticate", max_matches: 1 }),
+      {
+        assistantMessage: { role: "assistant", content: '{"status":"DONE_WITH_CONCERNS","summary":"Search was bounded.","findings":[]}' },
+        text: '{"status":"DONE_WITH_CONCERNS","summary":"Search was bounded.","findings":[]}',
+        toolCalls: []
+      }
+    ]);
+    const explorer = new ReadOnlyExplorer(provider, await makeExplorerWorkspace());
+
+    const result = await explorer.run({
+      question: "Find authentication references",
+      focus: "Facts",
+      outputBudget: 1000
+    });
+
+    expect(result.report.status).toBe("DONE_WITH_CONCERNS");
+    expect(result.exploration.searchMatchesReturned).toBe(1);
+    expect(result.exploration.limitsHit).toContain("max_search_matches");
+    expect(result.report.omitted).toContain("Explorer limit reached: max_search_matches");
+  });
+
   it("returns BLOCKED when the provider cannot run tool turns", async () => {
     const provider: ProviderClient = {
       name: "no-tools",
@@ -129,5 +187,6 @@ describe("ReadOnlyExplorer", () => {
     expect(result.report.status).toBe("BLOCKED");
     expect(result.report.summary).toMatch(/tool calling/i);
     expect(result.exploration.turns).toBe(0);
+    expect(result.externalApiCalled).toBe(false);
   });
 });

@@ -47,7 +47,7 @@ try {
   await client.connect(transport);
   const tools = await client.listTools();
   const names = tools.tools.map(tool => tool.name);
-  for (const required of ["delegate_provider_status", "delegate_summarize_paths", "delegate_wait"]) {
+  for (const required of ["delegate_provider_status", "delegate_explore_workspace", "delegate_summarize_paths", "delegate_wait"]) {
     if (!names.includes(required)) {
       throw new Error(`Missing stdio MCP tool: ${required}`);
     }

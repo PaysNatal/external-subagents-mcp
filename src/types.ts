@@ -168,6 +168,7 @@ export interface JobRecord {
   externalApiCalled: boolean;
   usage?: ProviderUsage;
   recovery?: ReportRecovery;
+  exploration?: ExplorationTelemetry;
 }
 
 export interface CachedJobResult {
@@ -181,4 +182,5 @@ export interface CachedJobResult {
   inputHash: string;
   usage?: ProviderUsage;
   recovery?: ReportRecovery;
+  exploration?: ExplorationTelemetry;
 }

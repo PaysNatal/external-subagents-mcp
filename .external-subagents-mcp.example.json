@@ -45,18 +45,21 @@
   },
   "profiles": {
     "single_provider": {
+      "explorer": "standard",
       "summarizer": "standard",
       "reviewer": "standard",
       "log_analyst": "standard",
       "file_finder": "standard"
     },
     "cost_first": {
+      "explorer": "lite",
       "summarizer": "lite",
       "reviewer": "pro",
       "log_analyst": "lite",
       "file_finder": "lite"
     },
     "quality_first": {
+      "explorer": "pro",
       "summarizer": "lite",
       "reviewer": "pro",
       "log_analyst": "pro",

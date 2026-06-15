@@ -6,7 +6,7 @@ import type { JobRecord } from "./types.js";
 
 export const SERVER_INSTRUCTIONS = `external-subagents-mcp: read-only external model delegates for Codex.
 
-All task tools (summarize, review, find_files, analyze_log) return a job record. Use delegate_wait then delegate_result to retrieve the structured report. Do not use these tools for implementation, patching, shell commands, migrations, formatting, or test execution.
+All task tools (explore, summarize, review, find_files, analyze_log) return a job record. Use delegate_wait then delegate_result to retrieve the structured report. Do not use these tools for implementation, patching, shell commands, migrations, formatting, or test execution.
 
 Codex remains the primary owner for understanding, planning, decisions, edits, commands, verification, and acceptance. Before large source reads, content searches, or log ingestion, Codex should perform an early delegation check and delegate only bounded read-heavy labor that it can independently verify.
 
@@ -17,6 +17,7 @@ The external model output is advisory. Codex must verify cited files and line nu
 Use delegate_provider_status and delegate_provider_smoke to check API keys, routing, and model connectivity before delegating expensive work.
 
 Tool selection guide:
+- investigate an unfamiliar workspace through bounded multi-turn reads and searches → delegate_explore_workspace
 - summarize or compress files → delegate_summarize_paths
 - review code or diff → delegate_review_diff
 - search or locate relevant files → delegate_find_relevant_files
@@ -24,7 +25,9 @@ Tool selection guide:
 
 These tools must not serve as implementers.
 
-Job records expose externalApiCalled, inputBytes, and provider usage when available. A cache hit reports externalApiCalled=false because the current request did not call the provider; any attached usage is historical usage from the original cached run.
+delegate_explore_workspace requires an OpenAI-compatible provider that supports tool calling. It exposes only bounded read-only list, search, and file-read tools. If tool calling is unavailable, Codex should use the known-path tools or investigate directly.
+
+Job records expose externalApiCalled, inputBytes, provider usage, and exploration telemetry when available. For explorer jobs, inputBytes covers the initial task prompt while exploration.sourceBytesRead records workspace source read during the tool loop. A cache hit reports externalApiCalled=false because the current request did not call the provider; any attached usage and exploration telemetry are historical usage from the original cached run.
 
 Provider output is recovered progressively when possible: strict JSON, repaired JSON, salvaged complete findings, structured text fallback, then bounded raw advice. Inspect job recovery metadata before acting on repaired or truncated reports; do not automatically retry a usable recovered report.
 
@@ -150,6 +153,28 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
       }
     },
     async input => toolResult(await app.delegateAnalyzeLog(input))
+  );
+
+  server.registerTool(
+    "delegate_explore_workspace",
+    {
+      title: "Explore an authorized workspace",
+      description:
+        "Delegate bounded multi-turn file listing, text search, and file reading in an authorized workspace. Use for unfamiliar codebases or questions that require iterative discovery; Codex remains responsible for planning and implementation.",
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+      inputSchema: {
+        workspace_root: workspaceRoot,
+        question: z.string().min(1).max(5000).describe("Concrete question the explorer should answer"),
+        scope_globs: z.array(z.string().min(1).max(200)).max(20).optional().describe("Optional glob patterns limiting the explorer to a smaller authorized scope"),
+        focus: z.string().min(1).max(5000).describe("Evidence, behavior, or subsystem the explorer should prioritize"),
+        max_turns: z.number().int().positive().max(20).optional().describe("Maximum provider tool-calling turns (default 8, hard max 20)"),
+        max_files: z.number().int().positive().max(200).optional().describe("Maximum distinct files the explorer may read (default 40, hard max 200)"),
+        max_total_bytes: z.number().int().positive().max(5_242_880).optional().describe("Maximum source bytes the explorer may read (default 1048576, hard max 5242880)"),
+        output_budget: z.number().int().positive().max(50000).optional().describe("Max output tokens per explorer turn"),
+        cache_mode: cacheMode.optional().describe("Cache behavior: read_write (default), read_only, skip")
+      }
+    },
+    async input => toolResult(await app.delegateExploreWorkspace(input))
   );
 
   server.registerTool(
@@ -310,5 +335,16 @@ function renderJobSummary(obj: Record<string, unknown>): string {
   const recoverySummary = typeof recovery?.parseMode === "string"
     ? ` parse=${recovery.parseMode}${recovery.outputTruncated === true ? "/truncated" : ""}`
     : "";
-  return `[${state}] ${kind}(${role})${provider ? ` via ${provider}` : ""}${elapsed} ${apiState}${usageSummary}${recoverySummary}`;
+  const exploration = obj.exploration as Record<string, unknown> | undefined;
+  const explorationSummary =
+    typeof exploration?.turns === "number" &&
+    typeof exploration?.toolCalls === "number" &&
+    typeof exploration?.filesRead === "number" &&
+    typeof exploration?.sourceBytesRead === "number"
+      ? ` explore=${exploration.turns}t/${exploration.toolCalls}tools/${exploration.filesRead}files/${exploration.sourceBytesRead}bytes`
+      : "";
+  const limitsSummary = Array.isArray(exploration?.limitsHit) && exploration.limitsHit.length > 0
+    ? ` limits=${exploration.limitsHit.join(",")}`
+    : "";
+  return `[${state}] ${kind}(${role})${provider ? ` via ${provider}` : ""}${elapsed} ${apiState}${usageSummary}${recoverySummary}${explorationSummary}${limitsSummary}`;
 }

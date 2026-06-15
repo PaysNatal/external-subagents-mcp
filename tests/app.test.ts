@@ -10,6 +10,87 @@ import { createWorkspaceResolver } from "../src/workspace.js";
 import type { DelegateReport, ProviderClient } from "../src/types.js";
 
 describe("ExternalSubagentsApp", () => {
+  it("delegates bounded workspace exploration through the shared async job manager", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "external-subagents-explore-app-"));
+    await mkdir(path.join(root, "src"), { recursive: true });
+    await writeFile(path.join(root, "src/auth.ts"), "export const authenticate = () => true;\n");
+
+    const config = normalizeConfig(
+      {
+        workspace: { allow: ["src/**"] },
+        cache: { dir: ".cache" },
+        providers: {
+          local: {
+            base_url: "https://example.test/v1",
+            api_key_env: "EXAMPLE_API_KEY",
+            model: "example-model"
+          }
+        },
+        roles: { summarizer: { provider: "local" } }
+      },
+      root
+    );
+    const provider: ProviderClient = {
+      name: "local",
+      runReport: vi.fn(async () => {
+        throw new Error("runReport should not be used");
+      }),
+      runToolTurn: vi.fn(async () => ({
+        assistantMessage: {
+          role: "assistant",
+          content: '{"status":"DONE","summary":"Authentication is in src/auth.ts.","findings":[]}'
+        },
+        text: '{"status":"DONE","summary":"Authentication is in src/auth.ts.","findings":[]}',
+        toolCalls: [],
+        usage: { promptTokens: 500, completionTokens: 100, totalTokens: 600 }
+      }))
+    };
+    const manager = new JobManager({
+      providers: new Map([["local", provider]]),
+      roles: new Map(Object.entries(config.roles)),
+      globalConcurrency: 1,
+      perProviderConcurrency: 1
+    });
+    const app = new ExternalSubagentsApp({
+      config,
+      workspaceResolver: createWorkspaceResolver(config),
+      cache: new DiskCache({
+        dir: config.cache.dir,
+        ttlHours: config.cache.ttlHours,
+        maxBytes: config.cache.maxBytes
+      }),
+      jobs: manager
+    });
+
+    const job = await app.delegateExploreWorkspace({
+      question: "Where is authentication implemented?",
+      focus: "Implementation facts and evidence",
+      scope_globs: ["src/**/*.ts"],
+      max_turns: 6,
+      max_files: 10,
+      max_total_bytes: 10000,
+      cache_mode: "skip"
+    });
+    const [completed] = await manager.wait([job.id], 1000);
+
+    expect(completed).toMatchObject({
+      state: "completed",
+      kind: "explore_workspace",
+      role: "explorer",
+      exploration: {
+        turns: 1,
+        toolCalls: 0,
+        filesRead: 0,
+        sourceBytesRead: 0,
+        searchMatchesReturned: 0,
+        limitsHit: []
+      }
+    });
+    expect(completed?.report?.summary).toContain("src/auth.ts");
+    expect(provider.runToolTurn).toHaveBeenCalledOnce();
+    expect(provider.runReport).not.toHaveBeenCalled();
+  });
+
   it("delegates path summaries and reuses disk cache on repeated inputs", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "external-subagents-app-"));
     await mkdir(path.join(root, "src"), { recursive: true });

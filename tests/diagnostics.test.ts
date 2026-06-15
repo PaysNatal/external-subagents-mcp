@@ -67,7 +67,8 @@ describe("provider diagnostics", () => {
     expect(report.providers.find(provider => provider.name === "pro")?.used_by).toEqual([
       "role:reviewer",
       "role:log_analyst",
-      "role:file_finder"
+      "role:file_finder",
+      "role:explorer"
     ]);
     expect(report.providers.find(provider => provider.name === "standard")).toMatchObject({
       chat_completions_url: "https://example.test/v1/openai/chat/completions",

@@ -24,6 +24,7 @@ describe("MCP server", () => {
       [
         "delegate_analyze_log",
         "delegate_cancel",
+        "delegate_explore_workspace",
         "delegate_find_relevant_files",
         "delegate_provider_smoke",
         "delegate_provider_status",
@@ -39,7 +40,8 @@ describe("MCP server", () => {
       "delegate_summarize_paths",
       "delegate_review_diff",
       "delegate_find_relevant_files",
-      "delegate_analyze_log"
+      "delegate_analyze_log",
+      "delegate_explore_workspace"
     ]) {
       const tool = tools.tools.find(candidate => candidate.name === name);
       expect(tool?.inputSchema.properties).toHaveProperty("workspace_root");
@@ -53,13 +55,21 @@ describe("MCP server", () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const job: JobRecord = {
       id: "job_test",
-      kind: "analyze_log",
-      role: "log_analyst",
+      kind: "explore_workspace",
+      role: "explorer",
       provider: "mimo",
       state: "completed",
       createdAt: "2026-06-08T00:00:00.000Z",
       cacheHit: false,
       externalApiCalled: true,
+      exploration: {
+        turns: 4,
+        toolCalls: 3,
+        filesRead: 1,
+        sourceBytesRead: 1234,
+        searchMatchesReturned: 5,
+        limitsHit: ["max_files"]
+      },
       usage: { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 },
       recovery: {
         parseMode: "salvaged",
@@ -84,10 +94,12 @@ describe("MCP server", () => {
     expect(JSON.parse(jsonPart)).toEqual([job]);
     // Verify the compact summary layer is present for JobRecord objects
     expect(text).toContain("[completed]");
-    expect(text).toContain("analyze_log(log_analyst)");
+    expect(text).toContain("explore_workspace(explorer)");
     expect(text).toContain("api=called");
     expect(text).toContain("usage=1500 tokens");
     expect(text).toContain("parse=salvaged/truncated");
+    expect(text).toContain("explore=4t/3tools/1files/1234bytes");
+    expect(text).toContain("limits=max_files");
 
     await client.close();
     await server.close();

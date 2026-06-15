@@ -1,6 +1,29 @@
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
-import type { BudgetRule, CachedJobResult, JobKind, JobRecord, JobState, ProviderClient, RoleConfig, RoutingConfig } from "./types.js";
+import type {
+  BudgetRule,
+  CachedJobResult,
+  ExplorationTelemetry,
+  JobKind,
+  JobRecord,
+  JobState,
+  ProviderClient,
+  ProviderRunResult,
+  RoleConfig,
+  RoutingConfig
+} from "./types.js";
+
+export interface JobExecutionContext {
+  provider: ProviderClient;
+  signal: AbortSignal;
+  maxOutputTokens: number;
+}
+
+export type JobExecutionResult = ProviderRunResult & {
+  exploration?: ExplorationTelemetry;
+  externalApiCalled?: boolean;
+};
+export type JobExecutor = (context: JobExecutionContext) => Promise<JobExecutionResult>;
 
 export interface StartJobInput {
   kind: JobKind;
@@ -12,6 +35,7 @@ export interface StartJobInput {
   inputBytes?: number;
   workspaceRoot?: string;
   maxOutputTokens?: number;
+  execute?: JobExecutor;
   onComplete?: (job: JobRecord) => Promise<void>;
 }
 
@@ -19,6 +43,7 @@ interface QueuedJob extends JobRecord {
   prompt: string;
   inputHash?: string;
   maxOutputTokens?: number;
+  execute?: JobExecutor;
   onComplete?: (job: JobRecord) => Promise<void>;
   abortController: AbortController;
 }
@@ -78,6 +103,7 @@ export class JobManager {
         externalApiCalled: false,
         usage: input.cached.usage,
         recovery: input.cached.recovery,
+        exploration: input.cached.exploration,
         prompt: "",
         abortController: new AbortController()
       };
@@ -103,6 +129,7 @@ export class JobManager {
       workspaceRoot: input.workspaceRoot,
       inputBytes,
       externalApiCalled: false,
+      execute: input.execute,
       onComplete: input.onComplete,
       abortController: new AbortController()
     };
@@ -186,13 +213,20 @@ export class JobManager {
     job.externalApiCalled = true;
 
     try {
-      const result = await provider.runReport({
-        role: job.role,
-        system: "You are an external read-only subagent. You cannot edit files, run shell commands, or apply patches.",
-        user: job.prompt,
-        maxOutputTokens: job.maxOutputTokens ?? role.maxOutputTokens,
-        signal: job.abortController.signal
-      });
+      const maxOutputTokens = job.maxOutputTokens ?? role.maxOutputTokens;
+      const result: JobExecutionResult = job.execute
+        ? await job.execute({
+            provider,
+            signal: job.abortController.signal,
+            maxOutputTokens
+          })
+        : await provider.runReport({
+            role: job.role,
+            system: "You are an external read-only subagent. You cannot edit files, run shell commands, or apply patches.",
+            user: job.prompt,
+            maxOutputTokens,
+            signal: job.abortController.signal
+          });
       const report = result.report;
       if (job.abortController.signal.aborted) {
         job.state = "cancelled";
@@ -201,6 +235,8 @@ export class JobManager {
       job.report = report;
       job.usage = result.usage;
       job.recovery = result.recovery;
+      job.exploration = result.exploration;
+      job.externalApiCalled = result.externalApiCalled ?? true;
       job.state = report.status === "FAILED" ? "failed" : "completed";
       job.error = report.status === "FAILED" ? report.summary : undefined;
       job.completedAt = new Date().toISOString();
@@ -342,7 +378,8 @@ function publicJob(job: QueuedJob | JobRecord): JobRecord {
     inputBytes,
     externalApiCalled,
     usage,
-    recovery
+    recovery,
+    exploration
   } = job;
   return {
     id,
@@ -364,7 +401,8 @@ function publicJob(job: QueuedJob | JobRecord): JobRecord {
     inputBytes,
     externalApiCalled,
     usage,
-    recovery
+    recovery,
+    exploration
   };
 }
 
