@@ -252,9 +252,9 @@ For explorer jobs, `inputBytes` covers the initial task prompt while
 
 ## Project Status
 
-The npm release is currently `0.2.1`. The `main` branch contains the upcoming
-`0.3.0` Codex-led worker-pool work; see the [changelog](CHANGELOG.md) for its
-unreleased capabilities.
+The current release is `0.3.0`, introducing the Codex-led read-only worker
+pool, bounded workspace explorer, early-delegation guidance, and exploration
+telemetry. See the [changelog](CHANGELOG.md) for release details.
 
 ## License
 

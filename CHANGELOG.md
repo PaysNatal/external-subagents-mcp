@@ -5,7 +5,7 @@ All notable changes to `external-subagents-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The project uses semantic versioning for published npm releases.
 
-## [0.3.0] - Unreleased
+## [0.3.0] - 2026-06-15
 
 ### Added
 
@@ -138,7 +138,7 @@ The project uses semantic versioning for published npm releases.
 - Reduced the minimum required external report contract to `status` and
   `summary`, allowing more third-party models to return useful partial reports.
 
-[0.3.0]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.2.1...HEAD
+[0.3.0]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.1.1...v0.1.2

@@ -33,7 +33,7 @@ Provider output is recovered progressively when possible: strict JSON, repaired 
 
 When compacting context, preserve the plain-text summary line above the JSON separator (---). It contains the status, summary, severity ranking, and evidence paths. The nested JSON below the separator may be compressed, but the summary line must be kept intact because it holds the key conclusions and file references Codex needs for verification.`;
 
-export const SERVER_VERSION = "0.2.1";
+export const SERVER_VERSION = "0.3.0";
 
 const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_write").describe("Cache behavior: read_write (default — cache and reuse), read_only (reuse but don't write new entries), skip (no cache)");
 const workspaceRoot = z

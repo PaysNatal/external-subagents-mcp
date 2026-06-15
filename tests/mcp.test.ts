@@ -19,7 +19,7 @@ describe("MCP server", () => {
     expect(SERVER_INSTRUCTIONS).toMatch(/before large source reads/i);
     expect(SERVER_INSTRUCTIONS).toContain("Codex remains");
     expect(SERVER_INSTRUCTIONS).toContain("recovery");
-    expect(SERVER_VERSION).toBe("0.2.1");
+    expect(SERVER_VERSION).toBe("0.3.0");
     expect(tools.tools.map(tool => tool.name).sort()).toEqual(
       [
         "delegate_analyze_log",
