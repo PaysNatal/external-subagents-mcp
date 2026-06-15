@@ -1,7 +1,27 @@
 {
   "workspace": {
     "allow": ["src/**", "tests/**", "docs/**", "package.json", "README.md"],
-    "deny": ["**/.env*", "**/node_modules/**", "**/dist/**", "**/*.pem"],
+    "deny": [
+      "**/.env*",
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/.git/**",
+      "**/*.pem",
+      "**/*.key",
+      "**/*.p12",
+      "**/*.crt",
+      "**/*.der",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.jpeg",
+      "**/*.gif",
+      "**/*.webp",
+      "**/*.pdf",
+      "**/*.zip",
+      "**/*.tar",
+      "**/*.gz"
+    ],
     "max_file_bytes": 262144,
     "max_total_bytes": 2097152
   },
