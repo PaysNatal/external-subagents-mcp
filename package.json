@@ -1,7 +1,7 @@
 {
   "name": "external-subagents-mcp",
   "version": "0.2.1",
-  "description": "A read-only MCP server that delegates large-context review and summarization work to OpenAI-compatible external models.",
+  "description": "A Codex-led read-only worker pool that delegates workspace exploration and high-context analysis to OpenAI-compatible models.",
   "type": "module",
   "bin": {
     "external-subagents-mcp": "dist/index.js"
@@ -10,6 +10,9 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "README.md",
+    "CHANGELOG.md",
+    "docs/configuration.md",
+    "docs/README.zh-CN.md",
     "LICENSE",
     ".external-subagents-mcp.example.json"
   ],
@@ -24,6 +27,11 @@
     "mcp",
     "codex",
     "subagents",
+    "external-workers",
+    "read-only",
+    "workspace-exploration",
+    "model-routing",
+    "token-efficiency",
     "openai-compatible",
     "glm",
     "mimo",
