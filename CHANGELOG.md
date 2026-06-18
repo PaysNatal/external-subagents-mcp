@@ -5,6 +5,26 @@ All notable changes to `external-subagents-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The project uses semantic versioning for published npm releases.
 
+## [0.3.1] - 2026-06-18
+
+### Changed
+
+- Reframed MCP server instructions so Codex treats external delegates as the
+  default path for read-heavy file discovery, summarization, log analysis, and
+  initial review.
+- Rewrote installed Codex instructions to present delegation as the default for
+  bounded read-heavy labor while keeping Codex responsible for decisions,
+  edits, commands, verification, and acceptance.
+- Strengthened task-tool descriptions with explicit `Use WHEN` triggers and
+  context-saving benefits.
+- Softened provider status and smoke-test wording so those diagnostics read as
+  optional session-start checks, not mandatory gates before every delegation.
+
+### Security
+
+- Updated the transitive `hono` dependency in the lockfile to address published
+  advisories affecting versions below `4.12.25`.
+
 ## [0.3.0] - 2026-06-15
 
 ### Added
@@ -138,6 +158,7 @@ The project uses semantic versioning for published npm releases.
 - Reduced the minimum required external report contract to `status` and
   `summary`, allowing more third-party models to return useful partial reports.
 
+[0.3.1]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.1.2...v0.2.0

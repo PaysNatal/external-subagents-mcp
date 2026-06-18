@@ -20,14 +20,14 @@ export interface InstallCodexInstructionsResult {
 export function renderCodexInstructions(): string {
   return `## External Subagents: Codex-Led Read-Only Labor Pool
 
-Codex remains the primary owner: understand the user's goal, plan, decide, edit, execute commands, verify results, and accept the final work.
+Codex remains the primary owner of the user's goal, plan, decisions, edits, command execution, verification, and final acceptance.
 
-External delegates are a read-only labor pool for bounded repetitive, simple, or high-context work such as file discovery, large source reading, summarization, log analysis, and initial review. They provide evidence and advice; they do not own the project or decide the final implementation.
+External delegates are a read-only labor pool for the read-heavy work in between: exploring unfamiliar workspaces, reading large source files, finding relevant files, summarizing, log analysis, and initial code review. Delegate this labor by default so Codex keeps context free for judgment and implementation.
 
-Before large source reads, content searches, or log ingestion, perform an early delegation check:
+Before large source reads, content searches, or log ingestion, perform an early delegation check and prefer delegation when the main cost is reading, searching, extracting, summarizing, or analyzing evidence that Codex can spot-check against cited files.
 
-- Delegate when a focused labor unit is repetitive, primarily search/read/extract/summarize/analyze, likely to consume substantial main-model context, and independently verifiable.
-- Keep the work with Codex when it requires architecture, cross-domain judgment, root-cause reasoning, final implementation decisions, edits, shell commands, tests, acceptance, sensitive unavailable context, or when delegation overhead exceeds the benefit.
+- Delegate one focused bounded labor unit whose result can guide what Codex verifies next.
+- Keep the work with Codex when it requires architecture, cross-domain judgment, root-cause reasoning, final implementation decisions, edits, shell commands, tests, approvals, acceptance, sensitive unavailable context, or when delegation overhead clearly exceeds the benefit.
 - Prefer one complete bounded labor unit over many micro-delegations.
 - Prefer path-based delegation so source content does not enter the main-model context.
 - Verify important evidence before acting. If delegation fails, is low-quality twice, or lacks required context, Codex takes over.

@@ -252,9 +252,10 @@ For explorer jobs, `inputBytes` covers the initial task prompt while
 
 ## Project Status
 
-The current release is `0.3.0`, introducing the Codex-led read-only worker
-pool, bounded workspace explorer, early-delegation guidance, and exploration
-telemetry. See the [changelog](CHANGELOG.md) for release details.
+The current release is `0.3.1`, tightening the delegation guidance so Codex
+uses the read-only worker pool more proactively for read-heavy work while
+preserving the verify-before-trust guardrails. See the
+[changelog](CHANGELOG.md) for release details.
 
 ## License
 

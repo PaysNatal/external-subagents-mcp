@@ -19,7 +19,7 @@ describe("MCP server", () => {
     expect(SERVER_INSTRUCTIONS).toMatch(/before large source reads/i);
     expect(SERVER_INSTRUCTIONS).toContain("Codex remains");
     expect(SERVER_INSTRUCTIONS).toContain("recovery");
-    expect(SERVER_VERSION).toBe("0.3.0");
+    expect(SERVER_VERSION).toBe("0.3.1");
     expect(tools.tools.map(tool => tool.name).sort()).toEqual(
       [
         "delegate_analyze_log",
@@ -100,6 +100,30 @@ describe("MCP server", () => {
     expect(text).toContain("parse=salvaged/truncated");
     expect(text).toContain("explore=4t/3tools/1files/1234bytes");
     expect(text).toContain("limits=max_files");
+
+    await client.close();
+    await server.close();
+  });
+
+  it("describes task tools with proactive delegation triggers", async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({} as ExternalSubagentsApp);
+    const client = new Client({ name: "test-client", version: "0.0.0" });
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const tools = await client.listTools();
+
+    for (const name of [
+      "delegate_summarize_paths",
+      "delegate_review_diff",
+      "delegate_find_relevant_files",
+      "delegate_analyze_log",
+      "delegate_explore_workspace"
+    ]) {
+      const tool = tools.tools.find(candidate => candidate.name === name);
+      expect(tool?.description).toMatch(/Use WHEN/i);
+      expect(tool?.description).toMatch(/context/i);
+    }
 
     await client.close();
     await server.close();

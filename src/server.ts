@@ -4,17 +4,19 @@ import * as z from "zod/v4";
 import type { ExternalSubagentsApp } from "./app.js";
 import type { JobRecord } from "./types.js";
 
-export const SERVER_INSTRUCTIONS = `external-subagents-mcp: read-only external model delegates for Codex.
+export const SERVER_INSTRUCTIONS = `external-subagents-mcp: read-only external model delegates that keep Codex's context clear for judgment, implementation, and verification.
 
-All task tools (explore, summarize, review, find_files, analyze_log) return a job record. Use delegate_wait then delegate_result to retrieve the structured report. Do not use these tools for implementation, patching, shell commands, migrations, formatting, or test execution.
+Before large source reads, content searches, log ingestion, broad file discovery, summarization, or initial review, Codex should delegate read-heavy labor by default. Use external delegates when the main cost is reading, searching, extracting, summarizing, or analyzing evidence that Codex can spot-check later.
 
-Codex remains the primary owner for understanding, planning, decisions, edits, commands, verification, and acceptance. Before large source reads, content searches, or log ingestion, Codex should perform an early delegation check and delegate only bounded read-heavy labor that it can independently verify.
+All task tools (explore, summarize, review, find_files, analyze_log) return a job record. Use delegate_wait then delegate_result to retrieve the structured report.
+
+Delegates are read-only guardrailed workers: they never edit files, run shell commands, run tests, format, migrate, patch, or decide architecture. Codex remains the primary owner for understanding, planning, decisions, edits, commands, verification, and acceptance.
 
 Prefer path-based delegation so large source files do not enter Codex context. When the project to read is not the server's default workspace, pass its absolute root as workspace_root; that root must directly contain .external-subagents-mcp.json. Use diff_text or log_text only when path-based input is unavailable.
 
 The external model output is advisory. Codex must verify cited files and line numbers before changing code.
 
-Use delegate_provider_status and delegate_provider_smoke to check API keys, routing, and model connectivity before delegating expensive work.
+Optionally use delegate_provider_status and delegate_provider_smoke once at the start of a session to check API keys, routing, and model connectivity. They are not required before every delegation.
 
 Tool selection guide:
 - investigate an unfamiliar workspace through bounded multi-turn reads and searches → delegate_explore_workspace
@@ -33,7 +35,7 @@ Provider output is recovered progressively when possible: strict JSON, repaired 
 
 When compacting context, preserve the plain-text summary line above the JSON separator (---). It contains the status, summary, severity ranking, and evidence paths. The nested JSON below the separator may be compressed, but the summary line must be kept intact because it holds the key conclusions and file references Codex needs for verification.`;
 
-export const SERVER_VERSION = "0.3.0";
+export const SERVER_VERSION = "0.3.1";
 
 const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_write").describe("Cache behavior: read_write (default — cache and reuse), read_only (reuse but don't write new entries), skip (no cache)");
 const workspaceRoot = z
@@ -55,7 +57,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Check provider routing and API key setup",
       description:
-        "Check which providers are configured, which API keys are set or missing, and which roles route to which providers. Does not expose secrets. Use before delegating work to verify connectivity.",
+        "Optionally run once at session start or after config changes to inspect configured providers, missing API keys, and role routing. Does not expose secrets and is not required before every delegation.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       inputSchema: z.object({})
     },
@@ -67,7 +69,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Smoke-test one provider",
       description:
-        "Send a minimal chat completion request to verify that one provider's base_url, API key, model ID, and report format are working. Use after delegate_provider_status to confirm connectivity before delegating expensive work.",
+        "Optionally run after delegate_provider_status when connectivity is uncertain. Sends one minimal chat completion to verify a provider's base_url, API key, model ID, and report format before expensive delegation.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
         provider: z.string().min(1).max(100).describe("Provider name from config, e.g. 'glm', 'mimo', 'deepseek'"),
@@ -82,7 +84,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Summarize workspace files",
       description:
-        "Read and summarize specified files without placing their full content in Codex context. Prefer paths plus workspace_root for large or cross-project codebases.",
+        "Use WHEN you would otherwise read multiple large files into context. The external model reads allowed paths and returns a focused summary, keeping raw file content out of Codex context. Pass paths relative to workspace_root; prefer path-based input for large or cross-project codebases.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
         workspace_root: workspaceRoot,
@@ -100,7 +102,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Review code diff",
       description:
-        "Review code for correctness, security, missing tests, regressions, and maintainability. Prefer paths plus workspace_root when reviewing complete files; use diff_text only when a diff is the necessary input.",
+        "Use WHEN a diff or its surrounding files are large enough that direct review would consume substantial context. The external reviewer checks correctness, security, missing tests, regressions, and maintainability while Codex keeps final judgment. Prefer paths plus workspace_root for file context; use diff_text only when a diff is the necessary input.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
         workspace_root: workspaceRoot,
@@ -121,7 +123,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Search for relevant files",
       description:
-        "Search, locate, or discover relevant files in an authorized workspace. Pass workspace_root for a project other than the server default.",
+        "Use WHEN you need to locate relevant files across many candidates instead of spending context on broad grep/read loops. The external model ranks allowed files and explains relevance so Codex can inspect only the best evidence. Pass workspace_root for a project other than the server default.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
         workspace_root: workspaceRoot,
@@ -141,7 +143,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Debug and analyze logs",
       description:
-        "Debug, analyze, or troubleshoot logs. Prefer log_path plus workspace_root when the log is in an authorized project; use log_text when no readable path is available.",
+        "Use WHEN logs are long, noisy, or likely to crowd out source context. The external model extracts likely causes, patterns, and verification steps while keeping raw log text out of Codex context. Prefer log_path plus workspace_root when the log is in an authorized project; use log_text when no readable path is available.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
         workspace_root: workspaceRoot,
@@ -160,7 +162,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     {
       title: "Explore an authorized workspace",
       description:
-        "Delegate bounded multi-turn file listing, text search, and file reading in an authorized workspace. Use for unfamiliar codebases or questions that require iterative discovery; Codex remains responsible for planning and implementation.",
+        "Use WHEN an unfamiliar codebase needs iterative file discovery, searching, and selective reading before Codex plans edits. The external explorer spends source-reading context and returns evidence, telemetry, and limits so Codex can decide what to verify. Codex remains responsible for planning and implementation.",
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       inputSchema: {
         workspace_root: workspaceRoot,
