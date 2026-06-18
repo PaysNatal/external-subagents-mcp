@@ -36,6 +36,7 @@ export interface StartJobInput {
   workspaceRoot?: string;
   maxOutputTokens?: number;
   execute?: JobExecutor;
+  forcedOmitted?: string[];
   onComplete?: (job: JobRecord) => Promise<void>;
 }
 
@@ -44,6 +45,7 @@ interface QueuedJob extends JobRecord {
   inputHash?: string;
   maxOutputTokens?: number;
   execute?: JobExecutor;
+  forcedOmitted?: string[];
   onComplete?: (job: JobRecord) => Promise<void>;
   abortController: AbortController;
 }
@@ -61,15 +63,21 @@ export interface JobManagerOptions {
   routing?: RoutingConfig;
   globalConcurrency: number;
   perProviderConcurrency: number;
+  maxRetainedFinalJobs?: number;
 }
+
+const DEFAULT_MAX_RETAINED_FINAL_JOBS = 200;
 
 export class JobManager {
   private readonly jobs = new Map<string, QueuedJob>();
   private readonly queue: QueuedJob[] = [];
   private runningGlobal = 0;
   private readonly runningByProvider = new Map<string, number>();
+  private readonly maxRetainedFinalJobs: number;
 
-  constructor(private readonly options: JobManagerOptions) {}
+  constructor(private readonly options: JobManagerOptions) {
+    this.maxRetainedFinalJobs = normalizeMaxRetainedFinalJobs(options.maxRetainedFinalJobs);
+  }
 
   start(input: StartJobInput): JobRecord {
     const role = this.options.roles.get(input.role);
@@ -95,7 +103,7 @@ export class JobManager {
         cacheKey: input.cacheKey,
         cacheHit: true,
         elapsedMs: 0,
-        report: input.cached.report,
+        report: appendOmitted(input.cached.report, input.forcedOmitted),
         maxOutputTokens,
         budgetSource,
         workspaceRoot: input.workspaceRoot,
@@ -108,6 +116,7 @@ export class JobManager {
         abortController: new AbortController()
       };
       this.jobs.set(cachedJob.id, cachedJob);
+      this.pruneFinalJobs();
       return publicJob(cachedJob);
     }
 
@@ -130,6 +139,7 @@ export class JobManager {
       inputBytes,
       externalApiCalled: false,
       execute: input.execute,
+      forcedOmitted: input.forcedOmitted,
       onComplete: input.onComplete,
       abortController: new AbortController()
     };
@@ -160,6 +170,11 @@ export class JobManager {
     job.abortController.abort();
     job.state = "cancelled";
     job.completedAt = new Date().toISOString();
+    const queuedIndex = this.queue.findIndex(queued => queued.id === job.id);
+    if (queuedIndex !== -1) {
+      this.queue.splice(queuedIndex, 1);
+    }
+    this.pruneFinalJobs();
     return publicJob(job);
   }
 
@@ -202,6 +217,8 @@ export class JobManager {
       job.state = "failed";
       job.error = "Missing provider or role configuration.";
       job.completedAt = new Date().toISOString();
+      job.prompt = "";
+      this.pruneFinalJobs();
       return;
     }
 
@@ -227,7 +244,7 @@ export class JobManager {
             maxOutputTokens,
             signal: job.abortController.signal
           });
-      const report = result.report;
+      const report = appendOmitted(result.report, job.forcedOmitted);
       if (job.abortController.signal.aborted) {
         job.state = "cancelled";
         return;
@@ -263,6 +280,7 @@ export class JobManager {
     } finally {
       this.runningGlobal -= 1;
       this.runningByProvider.set(providerName, Math.max(0, (this.runningByProvider.get(providerName) ?? 1) - 1));
+      this.pruneFinalJobs();
       this.pump();
     }
   }
@@ -310,6 +328,19 @@ export class JobManager {
       throw new Error(`Missing API key environment variable for provider "${providerName}": ${missingEnv}`);
     }
     throw new Error(`Unknown provider for role ${roleName}: ${providerName}`);
+  }
+
+  private pruneFinalJobs(): void {
+    const finalJobs = Array.from(this.jobs.values()).filter(job => isFinal(job.state));
+    const excess = finalJobs.length - this.maxRetainedFinalJobs;
+    if (excess <= 0) {
+      return;
+    }
+
+    finalJobs.sort((left, right) => finalJobTime(left) - finalJobTime(right));
+    for (const job of finalJobs.slice(0, excess)) {
+      this.jobs.delete(job.id);
+    }
   }
 }
 
@@ -404,6 +435,34 @@ function publicJob(job: QueuedJob | JobRecord): JobRecord {
     recovery,
     exploration
   };
+}
+
+function appendOmitted<T extends { omitted?: string[] }>(report: T, omitted: string[] | undefined): T {
+  if (!omitted?.length) {
+    return report;
+  }
+  return {
+    ...report,
+    omitted: unique([...(report.omitted ?? []), ...omitted])
+  };
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function normalizeMaxRetainedFinalJobs(value: number | undefined): number {
+  if (value === undefined) {
+    return DEFAULT_MAX_RETAINED_FINAL_JOBS;
+  }
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error("maxRetainedFinalJobs must be a positive integer.");
+  }
+  return value;
+}
+
+function finalJobTime(job: JobRecord): number {
+  return Date.parse(job.completedAt ?? job.startedAt ?? job.createdAt) || 0;
 }
 
 function isFinal(state: JobState): boolean {

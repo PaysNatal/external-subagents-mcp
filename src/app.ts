@@ -142,10 +142,12 @@ export class ExternalSubagentsApp {
 
   async delegateFindRelevantFiles(input: DelegateFindRelevantFilesInput): Promise<JobRecord> {
     const resolved = await this.options.workspaceResolver.resolve(input.workspace_root);
-    const candidates = await resolved.workspace.listAllowedFiles(input.globs, input.max_results ?? 200);
+    const candidateList = await resolved.workspace.listAllowedFiles(input.globs, input.max_results ?? 200);
+    const candidates = candidateList.files;
     if (candidates.length === 0) {
       throw new Error("No allowed files matched the requested globs.");
     }
+    const omitted = candidateList.truncated ? [candidateListTruncated(candidateList.files.length)] : [];
     return this.startWithCache({
       kind: "find_relevant_files",
       role: "file_finder",
@@ -156,16 +158,21 @@ export class ExternalSubagentsApp {
         globs: input.globs,
         focus: input.focus,
         candidates,
+        candidates_truncated: candidateList.truncated,
+        max_results: candidateList.maxResults,
+        omitted,
         output_budget: input.output_budget
       },
       outputBudget: input.output_budget,
       workspaceRoot: resolved.effectiveRoot,
+      forcedOmitted: omitted,
       prompt: [
         baseInstructions("file_finder", input.output_budget),
         `Query: ${input.query}`,
         `Focus: ${input.focus}`,
         "Rank the most relevant files. Evidence should reference candidate paths; do not invent files not listed.",
         `Candidate files:\n${candidates.map(file => `- ${file}`).join("\n")}`,
+        renderOmitted(omitted),
         REPORT_CONTRACT
       ].join("\n\n")
     });
@@ -283,6 +290,7 @@ export class ExternalSubagentsApp {
     outputBudget?: number;
     workspaceRoot: string;
     execute?: JobExecutor;
+    forcedOmitted?: string[];
   }): Promise<JobRecord> {
     const cacheMode = input.cacheMode ?? "read_write";
     const inputBytes = Buffer.byteLength(input.prompt, "utf8");
@@ -311,6 +319,7 @@ export class ExternalSubagentsApp {
       workspaceRoot: input.workspaceRoot,
       maxOutputTokens: input.outputBudget,
       execute: input.execute,
+      forcedOmitted: input.forcedOmitted,
       onComplete:
         cacheKey && cacheMode === "read_write"
           ? async job => {
@@ -334,6 +343,10 @@ export class ExternalSubagentsApp {
           : undefined
     });
   }
+}
+
+function candidateListTruncated(returnedFiles: number): string {
+  return `Candidate file list truncated at ${returnedFiles} files; narrow globs or raise max_results.`;
 }
 
 function baseInstructions(role: string, outputBudget?: number): string {

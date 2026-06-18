@@ -69,6 +69,10 @@ Providers are named OpenAI-compatible chat-completions endpoints:
 | `chat_completions_path` | no | Override for a provider's nonstandard completion path |
 | `timeout_ms` | no | Request timeout; default `120000`, maximum `600000` |
 
+`wire_api` is validated as a compatibility marker, not a protocol switch in
+0.3.x. The only implemented wire API is OpenAI-compatible
+`chat_completions`.
+
 The server normally appends `chat/completions` to `base_url`. It also handles a
 base URL that already includes the completion path. Set
 `chat_completions_path` only when the provider uses a different path.
@@ -350,6 +354,14 @@ The default deny policy blocks:
 
 Binary files are rejected. Symlinks cannot escape the workspace root.
 
+`max_total_bytes` limits source bytes the server reads from the workspace on
+its own. Caller-supplied `diff_text` and `log_text` are bounded separately by
+MCP tool schemas, because Codex explicitly chose to send that text.
+
+File-discovery results expose truncation when a candidate list exceeds its
+limit. `delegate_find_relevant_files` adds this to report `omitted`, and
+explorer `list_files` tool results include a `truncated` flag.
+
 Authorized source and logs are sent to the third-party provider you configure
 and remain subject to that provider's data policy.
 
@@ -412,6 +424,10 @@ Task tools accept:
 
 A cache hit reports `externalApiCalled: false`. Attached usage and exploration
 telemetry describe the original historical run.
+
+Completed job records are retained in memory for recent `delegate_result` and
+`delegate_status` lookups. The default window keeps the latest 200 final jobs;
+older job IDs may return as unknown during very long server sessions.
 
 ## Explorer Requirements And Limits
 

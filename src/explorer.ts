@@ -143,9 +143,18 @@ export class ReadOnlyExplorer {
       if (name === "list_files") {
         const args = listFilesSchema.parse(raw);
         const maxResults = Math.min(args.max_results ?? 100, limits.maxFiles);
-        const candidates = await this.workspace.listAllowedFiles(scopeGlobs, Math.max(maxResults * 5, maxResults));
-        const files = candidates.filter(file => matchesRequestedGlobs(file, args.globs)).slice(0, maxResults);
-        return boundedJson({ files }, limits.maxToolResultBytes);
+        const candidateList = await this.workspace.listAllowedFiles(scopeGlobs, Math.max(maxResults * 5, maxResults));
+        const filtered = candidateList.files.filter(file => matchesRequestedGlobs(file, args.globs));
+        const files = filtered.slice(0, maxResults);
+        const truncated = candidateList.truncated || filtered.length > maxResults;
+        if (truncated) {
+          recordLimit(telemetry, "max_file_list");
+        }
+        return boundedJson({
+          files,
+          truncated,
+          omitted: truncated ? [`Candidate file list truncated at ${files.length} files; narrow globs or raise max_results.`] : []
+        }, limits.maxToolResultBytes);
       }
       if (name === "search_text") {
         const args = searchTextSchema.parse(raw);

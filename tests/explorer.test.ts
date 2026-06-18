@@ -169,6 +169,41 @@ describe("ReadOnlyExplorer", () => {
     expect(result.report.omitted).toContain("Explorer limit reached: max_search_matches");
   });
 
+  it("marks truncated list_files results for the explorer model", async () => {
+    const workspace = await makeExplorerWorkspace();
+    let turn = 0;
+    const provider: ProviderClient = {
+      name: "scripted",
+      runReport: vi.fn(async () => {
+        throw new Error("not used");
+      }),
+      runToolTurn: vi.fn(async request => {
+        turn += 1;
+        if (turn === 1) {
+          return toolTurn("1", "list_files", { globs: ["src/**/*.ts"], max_results: 1 });
+        }
+        const toolMessage = request.messages.find(message => message.role === "tool");
+        expect(toolMessage?.content).toContain('"truncated":true');
+        return {
+          assistantMessage: { role: "assistant", content: '{"status":"DONE_WITH_CONCERNS","summary":"List was bounded.","findings":[]}' },
+          text: '{"status":"DONE_WITH_CONCERNS","summary":"List was bounded.","findings":[]}',
+          toolCalls: []
+        };
+      })
+    };
+    const explorer = new ReadOnlyExplorer(provider, workspace);
+
+    const result = await explorer.run({
+      question: "List source files",
+      focus: "File discovery",
+      scopeGlobs: ["src/**/*.ts"],
+      outputBudget: 1000
+    });
+
+    expect(result.exploration.limitsHit).toContain("max_file_list");
+    expect(result.report.omitted).toContain("Explorer limit reached: max_file_list");
+  });
+
   it("returns BLOCKED when the provider cannot run tool turns", async () => {
     const provider: ProviderClient = {
       name: "no-tools",

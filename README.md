@@ -242,6 +242,9 @@ Job records make external work inspectable:
 
 For explorer jobs, `inputBytes` covers the initial task prompt while
 `exploration.sourceBytesRead` records source read during the tool loop.
+File-list caps are reported as truncated or omitted so Codex can tell when a
+candidate set is incomplete. Completed job records are retained for recent
+in-process lookups; very old job IDs may age out during long Codex sessions.
 
 ## Documentation
 
@@ -252,9 +255,9 @@ For explorer jobs, `inputBytes` covers the initial task prompt while
 
 ## Project Status
 
-The current release is `0.3.1`, tightening the delegation guidance so Codex
-uses the read-only worker pool more proactively for read-heavy work while
-preserving the verify-before-trust guardrails. See the
+The current release is `0.3.2`, a stability patch for long Codex sessions and
+large repositories: completed jobs now have bounded retention, and truncated
+file candidate lists are visible to Codex and external workers. See the
 [changelog](CHANGELOG.md) for release details.
 
 ## License

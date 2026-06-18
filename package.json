@@ -1,6 +1,6 @@
 {
   "name": "external-subagents-mcp",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A Codex-led read-only worker pool that delegates workspace exploration and high-context analysis to OpenAI-compatible models.",
   "type": "module",
   "bin": {

@@ -35,7 +35,7 @@ Provider output is recovered progressively when possible: strict JSON, repaired 
 
 When compacting context, preserve the plain-text summary line above the JSON separator (---). It contains the status, summary, severity ranking, and evidence paths. The nested JSON below the separator may be compressed, but the summary line must be kept intact because it holds the key conclusions and file references Codex needs for verification.`;
 
-export const SERVER_VERSION = "0.3.1";
+export const SERVER_VERSION = "0.3.2";
 
 const cacheMode = z.enum(["read_write", "read_only", "skip"]).default("read_write").describe("Cache behavior: read_write (default — cache and reuse), read_only (reuse but don't write new entries), skip (no cache)");
 const workspaceRoot = z
@@ -197,7 +197,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     "delegate_result",
     {
       title: "Get delegate job result",
-      description: "Retrieve the structured report from a completed delegate job. Use after delegate_wait to get the findings, recommendations, and reasoning chain.",
+      description: "Retrieve the structured report from a completed delegate job while it is still retained by this server process. Use after delegate_wait to get findings and recommendations; very old final jobs may age out.",
       annotations: { readOnlyHint: true, destructiveHint: false },
       inputSchema: {
         job_id: z.string().min(1).max(100).describe("Job ID returned by a task tool, e.g. 'job_abc123'")
@@ -216,7 +216,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     "delegate_status",
     {
       title: "List delegate job statuses",
-      description: "List the state of all delegate jobs (queued, running, completed, failed, cancelled). With no job_ids, returns every job in this server process. Use to track progress of pending work.",
+      description: "List retained delegate jobs and their states (queued, running, completed, failed, cancelled). With no job_ids, returns jobs still retained in this server process. Use to track progress of pending work.",
       annotations: { readOnlyHint: true, destructiveHint: false },
       inputSchema: {
         job_ids: z.array(z.string().min(1).max(100)).max(100).optional().describe("Specific job IDs to check, or omit to list all jobs")
@@ -229,7 +229,7 @@ export function createMcpServer(app: ExternalSubagentsApp): McpServer {
     "delegate_cancel",
     {
       title: "Cancel delegate job",
-      description: "Cancel a queued or running delegate job. Completed or failed jobs are left intact. Use when you no longer need the result of a pending task.",
+      description: "Cancel a queued or running delegate job. Completed or failed jobs are left intact while they remain in the recent-job retention window. Use when you no longer need a pending task.",
       annotations: { readOnlyHint: true, destructiveHint: false },
       inputSchema: {
         job_id: z.string().min(1).max(100).describe("Job ID to cancel, e.g. 'job_abc123'")

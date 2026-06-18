@@ -395,6 +395,75 @@ describe("JobManager", () => {
     });
   });
 
+  it("retains only the most recent final jobs when retention is bounded", () => {
+    const report: DelegateReport = {
+      status: "DONE",
+      summary: "cached",
+      findings: [],
+      next_actions: [],
+      omitted: []
+    };
+    const manager = new JobManager({
+      providers: new Map(),
+      roles: new Map([["reviewer", { provider: "local", maxOutputTokens: 1000 }]]),
+      globalConcurrency: 1,
+      perProviderConcurrency: 1,
+      maxRetainedFinalJobs: 2
+    });
+
+    const first = manager.start({
+      kind: "review_diff",
+      role: "reviewer",
+      prompt: "first",
+      cacheKey: "first",
+      cached: {
+        id: "first",
+        role: "reviewer",
+        provider: "local",
+        report,
+        createdAt: "2026-06-13T00:00:00.000Z",
+        completedAt: "2026-06-13T00:00:01.000Z",
+        cacheKey: "first",
+        inputHash: "first"
+      }
+    });
+    const second = manager.start({
+      kind: "review_diff",
+      role: "reviewer",
+      prompt: "second",
+      cacheKey: "second",
+      cached: {
+        id: "second",
+        role: "reviewer",
+        provider: "local",
+        report,
+        createdAt: "2026-06-13T00:00:02.000Z",
+        completedAt: "2026-06-13T00:00:03.000Z",
+        cacheKey: "second",
+        inputHash: "second"
+      }
+    });
+    const third = manager.start({
+      kind: "review_diff",
+      role: "reviewer",
+      prompt: "third",
+      cacheKey: "third",
+      cached: {
+        id: "third",
+        role: "reviewer",
+        provider: "local",
+        report,
+        createdAt: "2026-06-13T00:00:04.000Z",
+        completedAt: "2026-06-13T00:00:05.000Z",
+        cacheKey: "third",
+        inputHash: "third"
+      }
+    });
+
+    expect(manager.result(first.id)).toBeUndefined();
+    expect(manager.status().map(job => job.id)).toEqual([second.id, third.id]);
+  });
+
   it("marks failed provider attempts as external API calls", async () => {
     const failed: DelegateReport = {
       status: "FAILED",

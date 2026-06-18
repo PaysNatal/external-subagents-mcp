@@ -227,4 +227,69 @@ describe("ExternalSubagentsApp", () => {
     expect(completed?.workspaceRoot).toBe(await realpath(secondRoot));
     expect(provider.runReport).toHaveBeenCalledOnce();
   });
+
+  it("surfaces truncated candidate file lists in find-relevant-files reports", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "external-subagents-find-files-"));
+    await mkdir(path.join(root, "src"), { recursive: true });
+    await writeFile(path.join(root, "src/alpha.ts"), "export const alpha = 1;\n");
+    await writeFile(path.join(root, "src/beta.ts"), "export const beta = 2;\n");
+    await writeFile(path.join(root, "src/gamma.ts"), "export const gamma = 3;\n");
+
+    const config = normalizeConfig(
+      {
+        workspace: { allow: ["src/**"] },
+        cache: { dir: ".cache" },
+        providers: {
+          local: {
+            base_url: "https://example.test/v1",
+            api_key_env: "EXAMPLE_API_KEY",
+            model: "example-model"
+          }
+        },
+        roles: { file_finder: { provider: "local" } }
+      },
+      root
+    );
+    const report: DelegateReport = {
+      status: "DONE_WITH_CONCERNS",
+      summary: "Ranked visible candidates.",
+      findings: [],
+      next_actions: [],
+      omitted: []
+    };
+    const provider: ProviderClient = {
+      name: "local",
+      runReport: vi.fn(async request => {
+        expect(request.user).toContain("Candidate file list truncated");
+        return { report };
+      })
+    };
+    const manager = new JobManager({
+      providers: new Map([["local", provider]]),
+      roles: new Map(Object.entries(config.roles)),
+      globalConcurrency: 1,
+      perProviderConcurrency: 1
+    });
+    const app = new ExternalSubagentsApp({
+      config,
+      workspaceResolver: createWorkspaceResolver(config),
+      cache: new DiskCache({
+        dir: config.cache.dir,
+        ttlHours: config.cache.ttlHours,
+        maxBytes: config.cache.maxBytes
+      }),
+      jobs: manager
+    });
+
+    const job = await app.delegateFindRelevantFiles({
+      query: "rank project files",
+      focus: "candidate ranking",
+      globs: ["src/**/*.ts"],
+      max_results: 2,
+      cache_mode: "skip"
+    });
+    const [completed] = await manager.wait([job.id], 1000);
+
+    expect(completed?.report?.omitted).toContain("Candidate file list truncated at 2 files; narrow globs or raise max_results.");
+  });
 });

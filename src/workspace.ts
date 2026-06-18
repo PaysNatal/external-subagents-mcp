@@ -16,11 +16,17 @@ export interface WorkspaceSearchMatch {
   preview: string;
 }
 
+export interface WorkspaceFileList {
+  files: string[];
+  truncated: boolean;
+  maxResults: number;
+}
+
 export interface WorkspaceReader {
   readAllowedFile(relativePath: string): Promise<WorkspaceDocument>;
   readAllowedFiles(relativePaths: string[]): Promise<{ documents: WorkspaceDocument[]; omitted: string[] }>;
   readAllowedFileRange(relativePath: string, lineStart: number, lineEnd: number): Promise<WorkspaceDocument>;
-  listAllowedFiles(globs?: string[], maxResults?: number): Promise<string[]>;
+  listAllowedFiles(globs?: string[], maxResults?: number): Promise<WorkspaceFileList>;
   searchAllowedText(query: string, globs?: string[], maxMatches?: number): Promise<WorkspaceSearchMatch[]>;
 }
 
@@ -157,25 +163,29 @@ class SafeWorkspace implements WorkspaceReader {
     return { documents, omitted };
   }
 
-  async listAllowedFiles(globs: string[] = ["**/*"], maxResults = 200): Promise<string[]> {
+  async listAllowedFiles(globs: string[] = ["**/*"], maxResults = 200): Promise<WorkspaceFileList> {
+    const limit = normalizeMaxResults(maxResults);
     const results: string[] = [];
+    let truncated = false;
     await walk(this.config.workspace.root, async absolute => {
-      if (results.length >= maxResults) {
-        return;
-      }
       const rel = toPosix(path.relative(this.config.workspace.root, absolute));
       if (isDenied(rel, this.config) || !isAllowed(rel, this.config)) {
-        return;
+        return false;
       }
       if (!globs.some(glob => minimatch(rel, glob, { dot: true }))) {
-        return;
+        return false;
       }
       const fileStat = await stat(absolute);
       if (fileStat.isFile() && fileStat.size <= this.config.workspace.maxFileBytes) {
+        if (results.length >= limit) {
+          truncated = true;
+          return true;
+        }
         results.push(rel);
       }
+      return false;
     });
-    return results;
+    return { files: results, truncated, maxResults: limit };
   }
 
   async readAllowedFileRange(relativePath: string, lineStart: number, lineEnd: number): Promise<WorkspaceDocument> {
@@ -196,7 +206,7 @@ class SafeWorkspace implements WorkspaceReader {
       throw new Error("Search query must not be empty.");
     }
     const matches: WorkspaceSearchMatch[] = [];
-    const candidates = await this.listAllowedFiles(globs, Math.max(maxMatches * 10, 200));
+    const { files: candidates } = await this.listAllowedFiles(globs, Math.max(maxMatches * 10, 200));
     for (const candidate of candidates) {
       if (matches.length >= maxMatches) break;
       try {
@@ -223,12 +233,12 @@ const MAX_DEPTH = 50;
 
 async function walk(
   root: string,
-  onFile: (absolute: string) => Promise<void>,
+  onFile: (absolute: string) => Promise<boolean | void>,
   depth = 0,
   visited = new Set<string>()
-): Promise<void> {
+): Promise<boolean> {
   if (depth > MAX_DEPTH) {
-    return;
+    return false;
   }
 
   const entries = await readdir(root, { withFileTypes: true });
@@ -251,9 +261,13 @@ async function walk(
             continue; // cycle detected
           }
           visited.add(resolved);
-          await walk(resolved, onFile, depth + 1, visited);
+          if (await walk(resolved, onFile, depth + 1, visited)) {
+            return true;
+          }
         } else if (resolvedStat.isFile()) {
-          await onFile(absolute);
+          if (await onFile(absolute)) {
+            return true;
+          }
         }
       } catch {
         // Dangling symlink or permission error — skip
@@ -269,7 +283,9 @@ async function walk(
           continue; // cycle detected
         }
         visited.add(resolved);
-        await walk(absolute, onFile, depth + 1, visited);
+        if (await walk(absolute, onFile, depth + 1, visited)) {
+          return true;
+        }
       } catch (error) {
         // Skip inaccessible directories gracefully
         const code = (error as NodeJS.ErrnoException).code;
@@ -279,9 +295,12 @@ async function walk(
         continue;
       }
     } else if (entry.isFile()) {
-      await onFile(absolute);
+      if (await onFile(absolute)) {
+        return true;
+      }
     }
   }
+  return false;
 }
 
 function normalizeRelativePath(input: string): string {
@@ -332,6 +351,10 @@ function assertPathInsideRoot(candidate: string, root: string): void {
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error("Target config workspace.root must stay inside the requested project.");
   }
+}
+
+function normalizeMaxResults(value: number): number {
+  return Number.isInteger(value) && value > 0 ? value : 1;
 }
 
 function looksBinary(buffer: Buffer): boolean {

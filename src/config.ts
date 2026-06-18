@@ -34,6 +34,7 @@ const providerSchema = z
     api_key_env: z.string().min(1),
     api_key: z.never().optional(),
     model: z.string().min(1),
+    // Reserved for future wire protocols; 0.3.x only implements chat_completions.
     wire_api: z.literal("chat_completions").default("chat_completions"),
     timeout_ms: z.number().int().positive().max(600000).default(120000)
   })

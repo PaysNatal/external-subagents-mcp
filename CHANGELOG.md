@@ -5,6 +5,28 @@ All notable changes to `external-subagents-mcp` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The project uses semantic versioning for published npm releases.
 
+## [0.3.2] - 2026-06-18
+
+### Fixed
+
+- Bounded in-memory retention for completed jobs so long-running Codex sessions
+  do not keep every historical job record indefinitely. The server keeps the
+  latest 200 final jobs for recent `delegate_result` and `delegate_status`
+  lookups.
+- Made file-list truncation visible. Workspace file discovery now reports
+  whether a candidate list was truncated; `delegate_find_relevant_files` adds
+  that fact to report `omitted`, and explorer `list_files` tool results include
+  a `truncated` flag.
+
+### Changed
+
+- File discovery stops walking after detecting the first extra matching file
+  beyond the configured result cap.
+- Documented that `wire_api` is a reserved compatibility marker in 0.3.x, not
+  a selectable protocol.
+- Documented the difference between workspace `max_total_bytes` and
+  caller-supplied `diff_text` / `log_text` schema caps.
+
 ## [0.3.1] - 2026-06-18
 
 ### Changed
@@ -158,6 +180,7 @@ The project uses semantic versioning for published npm releases.
 - Reduced the minimum required external report contract to `status` and
   `summary`, allowing more third-party models to return useful partial reports.
 
+[0.3.2]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/PaysNatal/external-subagents-mcp/compare/v0.2.0...v0.2.1

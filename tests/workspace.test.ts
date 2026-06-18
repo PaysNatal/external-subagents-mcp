@@ -98,6 +98,23 @@ describe("workspace access", () => {
     expect(range.bytes).toBeGreaterThan(0);
   });
 
+  it("reports when allowed file listing is truncated", async () => {
+    const root = await makeWorkspace();
+    await writeFile(path.join(root, "src/alpha.ts"), "export const alpha = 1;\n");
+    await writeFile(path.join(root, "src/beta.ts"), "export const beta = 2;\n");
+    const workspace = createWorkspace(normalizeConfig({
+      workspace: { allow: ["src/**"], deny: ["**/.env*"] },
+      providers: { local: { base_url: "https://example.test/v1", api_key_env: "KEY", model: "local" } },
+      roles: { summarizer: "local" }
+    }, root));
+
+    const listing = await workspace.listAllowedFiles(["src/**/*.ts"], 2);
+
+    expect(listing.files).toHaveLength(2);
+    expect(listing.truncated).toBe(true);
+    expect(listing.maxResults).toBe(2);
+  });
+
   it("resolves a second workspace only when it has a direct authorization config", async () => {
     const defaultRoot = await makeWorkspace();
     const secondRoot = await makeWorkspace();

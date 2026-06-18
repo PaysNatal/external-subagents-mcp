@@ -278,11 +278,13 @@ Job 记录会显示：
 
 Explorer job 的 `inputBytes` 只表示初始任务 prompt；工具循环读取的源码规模请查看 `exploration.sourceBytesRead`。
 
+文件候选列表达到上限时会标记为 truncated 或写入 `omitted`，方便 Codex 判断外部模型看到的不是完整候选集。已完成 job 会在当前 server 进程中保留最近一批结果；长会话中过老的 job id 可能被清理。
+
 缓存命中时 `externalApiCalled` 为 `false`。附带的 usage 和 exploration 是原始缓存任务的历史数据，不代表本次产生了新的 API 调用。
 
 ## 项目状态
 
-当前发布版本为 `0.3.1`，进一步强化早期委托文案，让 Codex 更主动把读重活交给只读劳动力池，同时保留先验证再采纳的安全边界。具体变化请查看[更新日志](../CHANGELOG.md)。
+当前发布版本为 `0.3.2`，主要修补长会话和大仓库稳定性：已完成 job 有了有界保留窗口，文件候选列表截断也会明确暴露给 Codex 和外部模型。具体变化请查看[更新日志](../CHANGELOG.md)。
 
 ## 许可证
 
